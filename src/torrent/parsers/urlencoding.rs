@@ -1,6 +1,14 @@
 #![allow(dead_code)]
 const MAX_CHAR_VAL: u32 = std::char::MAX as u32;
 
+/// Se encarga de codificar en formato urlencoding.
+/// Recibe un String y lo devuelve codificado según sus caracteres ascii
+///
+/// Ejemplo
+/// ```rust
+/// let to_encode = String::from(" A<>d#%{}|^~[]RR`mpqZ");
+/// let result = url_encode(to_encode);
+/// ```
 pub fn url_encode(to_encode: String) -> String {
     let mut buff = [0; 4]; // se usa para encode_utf8(), donde dice que un buffer de tamaño 4 es suficiente para encodear cualquier char
     let encoded = to_encode
@@ -58,6 +66,16 @@ mod tests {
         assert_eq!(
             result,
             String::from("%20%3c%3e%23%25%7b%7d%7c%5e%7e%5b%5d%60")
+        );
+    }
+
+    #[test]
+    fn mix_ascii_chars_encodes_ok() {
+        let to_encode = String::from(" A<>d#%{}|^~[]RR`mpqZ");
+        let result = url_encode(to_encode);
+        assert_eq!(
+            result,
+            String::from("%20A%3c%3ed%23%25%7b%7d%7c%5e%7e%5b%5dRR%60mpqZ")
         );
     }
 }
