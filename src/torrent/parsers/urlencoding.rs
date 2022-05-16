@@ -1,13 +1,13 @@
-#![allow(dead_code)]
 const MAX_CHAR_VAL: u32 = std::char::MAX as u32;
 
 /// Se encarga de codificar en formato urlencoding.
 /// Recibe un String y lo devuelve codificado según sus caracteres ascii
 ///
 /// Ejemplo
-/// ```rust
+/// ```
+/// # use fa_torrent::torrent::parsers::urlencoding;
 /// let to_encode = String::from(" A<>d#%{}|^~[]RR`mpqZ");
-/// let result = url_encode(to_encode);
+/// let result = urlencoding::url_encode(to_encode);
 /// ```
 pub fn url_encode(to_encode: String) -> String {
     let mut buff = [0; 4]; // se usa para encode_utf8(), donde dice que un buffer de tamaño 4 es suficiente para encodear cualquier char

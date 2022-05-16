@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::collections::HashMap;
 
 type TupleStringRest = (String, String);
