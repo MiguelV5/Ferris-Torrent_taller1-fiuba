@@ -1,3 +1,9 @@
+//!# Modulo de decoder de Bencoding
+//! Este modulo va a servir para pasar a String/Integer/List/Dic dado un String
+//!  que esta en el formato Bencoding
+#![allow(dead_code)]
+use super::constants::*;
+use super::values::ValuesBencoding;
 use std::collections::HashMap;
 
 type TupleStringRest = (String, String);
@@ -6,8 +12,13 @@ type TupleListRest = (Vec<ValuesBencoding>, String);
 type TupleValueRest = (ValuesBencoding, String);
 type TupleDicRest = (HashMap<String, ValuesBencoding>, String);
 
+const NEGATIVE_ZERO: &str = "-0";
+const MINUS: char = '-';
+const ZERO: char = '0';
+
 type ResultBencoding<T> = Result<T, ErrorBencoding>;
 
+///Enumerado de los distos tipos que pueden dar error con su descripcion de error dentro
 #[derive(PartialEq, Debug)]
 pub enum ErrorBencoding {
     String(ErrorType),
@@ -16,6 +27,7 @@ pub enum ErrorBencoding {
     Dic(ErrorType),
 }
 
+///Enumerado de los posibles errores al desencodear
 #[derive(PartialEq, Debug)]
 pub enum ErrorType {
     Format,
@@ -23,14 +35,10 @@ pub enum ErrorType {
     Number,
 }
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum ValuesBencoding {
-    String(String),
-    Integer(i64),
-    List(Vec<ValuesBencoding>),
-    Dic(HashMap<String, ValuesBencoding>),
-}
-
+///Funcion que dado un String en formato bencoding va a desencodear a String y luego va a devolver un Result
+/// de una tupla con el String desencodeado y lo que sobre del String pasado, o en caso de error se devolvera
+/// el mismo que sera del tipo ErrorBencoding, por ej: en caso de pasar "4:testi32e3:fin" se devolvera Ok con la tupla
+/// ("test", "i32e3:fin")
 pub fn to_string(to_parse: String) -> ResultBencoding<TupleStringRest> {
     let mut result = String::new();
     let mut long_string = String::new();
@@ -39,7 +47,7 @@ pub fn to_string(to_parse: String) -> ResultBencoding<TupleStringRest> {
     //Tomo todos los valores antes del ':' que deberian representar el largo del string
     let mut list_chars = to_parse.chars();
     for long_char in list_chars.by_ref() {
-        if long_char == ':' {
+        if long_char == TWO_POINTS {
             valid_format = true;
             break;
         }
@@ -69,47 +77,38 @@ pub fn to_string(to_parse: String) -> ResultBencoding<TupleStringRest> {
     Ok((result, list_chars.collect()))
 }
 
-pub fn from_string(to_bencode: String) -> String {
-    let mut bencoding = String::new();
-    let long_number = to_bencode.len() as u32;
-    let long_str = long_number.to_string();
-
-    bencoding.push_str(&long_str);
-    bencoding.push(':');
-    bencoding.push_str(&to_bencode);
-
-    bencoding
-}
-
 fn is_valid_number(num: String) -> bool {
-    if num == "-0" {
+    if num == NEGATIVE_ZERO {
         return false;
     }
     let mut chars_num = num.chars();
 
     if let Some(digit) = chars_num.next() {
-        if digit == '-' {
+        if digit == MINUS {
             return is_valid_number(chars_num.collect());
-        } else if digit == '0' && chars_num.next().is_some() {
+        } else if digit == ZERO && chars_num.next().is_some() {
             return false;
         }
     }
     true
 }
 
+///Funcion que va a pasar un String en formato bencoding a un i64, los cual va a devolverlos en un Result, con el
+/// formato de una tupla, la cual su primer valor sera el i64 y el siguiente el resto del string del bencoding pasado,
+/// en caso de error se devolvera el mismo
 pub fn to_integer(to_parse: String) -> ResultBencoding<TupleIntegerRest> {
     let mut num_str = String::new();
     let mut valid_format = false;
     let mut list_chars = to_parse.chars();
 
     //Valido que el primer caracter sea 'i'
-    if let Some('i') = list_chars.next() {
+    if let Some(CHAR_I) = list_chars.next() {
     } else {
         return Err(ErrorBencoding::Integer(ErrorType::Format));
     }
 
     for num_char in list_chars.by_ref() {
-        if num_char == 'e' {
+        if num_char == CHAR_E {
             valid_format = true;
             break;
         }
@@ -131,15 +130,6 @@ pub fn to_integer(to_parse: String) -> ResultBencoding<TupleIntegerRest> {
     }
 }
 
-pub fn from_integer(to_bencode: i64) -> String {
-    let mut bencoding = String::from("i");
-    let num_string = to_bencode.to_string();
-    bencoding.push_str(&num_string);
-    bencoding.push('e');
-
-    bencoding
-}
-
 fn take_value_by_type(
     from: char,
     type_char: char,
@@ -148,22 +138,25 @@ fn take_value_by_type(
     if type_char.is_ascii_digit() {
         let (str, next_parse) = to_string(to_parse)?;
         Ok((ValuesBencoding::String(str), next_parse))
-    } else if type_char == 'i' {
+    } else if type_char == CHAR_I {
         let (int, next_parse) = to_integer(to_parse)?;
         Ok((ValuesBencoding::Integer(int), next_parse))
-    } else if type_char == 'l' {
+    } else if type_char == CHAR_L {
         let (list, next_parse) = to_list(to_parse)?;
         Ok((ValuesBencoding::List(list), next_parse))
-    } else if type_char == 'd' {
+    } else if type_char == CHAR_D {
         let (dic, next_parse) = to_dic(to_parse)?;
         Ok((ValuesBencoding::Dic(dic), next_parse))
-    } else if from == 'l' {
+    } else if from == CHAR_L {
         Err(ErrorBencoding::List(ErrorType::Format))
     } else {
         Err(ErrorBencoding::Dic(ErrorType::Format))
     }
 }
 
+///Funcion que va a desencodear un String del tipo Bencoding en una lista ([Vec]), la cual sera devuelta en un Result con
+/// el formato de una tupla en la cual su primer valor sera la lista desencodeada y su segundo valor sera el restante del String,
+/// en caso de error se devolvera el mismo
 pub fn to_list(to_parse: String) -> ResultBencoding<TupleListRest> {
     let mut list_return = Vec::new();
     let mut valid_format = false;
@@ -171,18 +164,18 @@ pub fn to_list(to_parse: String) -> ResultBencoding<TupleListRest> {
 
     //Reviso que el string comience con 'l'
     match list_chars.next() {
-        Some('l') => (),
+        Some(CHAR_L) => (),
         _ => return Err(ErrorBencoding::List(ErrorType::Format)),
     }
 
     let mut to_parse: String = list_chars.clone().collect();
 
     while let Some(next_char) = list_chars.next() {
-        if next_char == 'e' {
+        if next_char == CHAR_E {
             valid_format = true;
             break;
         }
-        let (value, next_parse) = take_value_by_type('l', next_char, to_parse)?;
+        let (value, next_parse) = take_value_by_type(CHAR_L, next_char, to_parse)?;
         list_return.push(value);
         to_parse = next_parse;
         list_chars = to_parse.chars();
@@ -195,24 +188,9 @@ pub fn to_list(to_parse: String) -> ResultBencoding<TupleListRest> {
     Ok((list_return, list_chars.collect()))
 }
 
-pub fn from_list(to_bencode: Vec<ValuesBencoding>) -> String {
-    let mut bencoding = String::from("l");
-    let iterator = to_bencode.into_iter();
-
-    for values in iterator {
-        let str_to_add = match values {
-            ValuesBencoding::String(str) => from_string(str),
-            ValuesBencoding::Integer(int) => from_integer(int),
-            ValuesBencoding::List(list) => from_list(list),
-            ValuesBencoding::Dic(dic) => from_dic(dic),
-        };
-        bencoding.push_str(&str_to_add);
-    }
-
-    bencoding.push('e');
-    bencoding
-}
-
+///Funcion para desencodear un String del tipo bencoding en formato de diccionario ([HashMap]) en el cual se devolvera un Result,
+/// el cual contendra una tupla con el diccionario como primer valor y el sobrante del string del bencoding pasado como segundo
+/// valor, en caso de error se devolvera el correspondiente
 pub fn to_dic(to_parse: String) -> ResultBencoding<TupleDicRest> {
     let mut dic_return: HashMap<String, ValuesBencoding> = HashMap::new();
     let mut valid_format = false;
@@ -220,14 +198,14 @@ pub fn to_dic(to_parse: String) -> ResultBencoding<TupleDicRest> {
 
     //Reviso que el string comience con 'd'
     match list_chars.next() {
-        Some('d') => (),
+        Some(CHAR_D) => (),
         _ => return Err(ErrorBencoding::Dic(ErrorType::Format)),
     }
 
     let mut to_parse: String = list_chars.clone().collect();
 
     while let Some(next_char) = list_chars.next() {
-        if next_char == 'e' {
+        if next_char == CHAR_E {
             valid_format = true;
             break;
         }
@@ -236,7 +214,7 @@ pub fn to_dic(to_parse: String) -> ResultBencoding<TupleDicRest> {
             Err(_) => return Err(ErrorBencoding::Dic(ErrorType::Format)),
         };
         if let Some(char_next) = next_parse.chars().next() {
-            let (value, next_parse) = take_value_by_type('d', char_next, next_parse)?;
+            let (value, next_parse) = take_value_by_type(CHAR_D, char_next, next_parse)?;
             dic_return.insert(key, value);
             to_parse = next_parse;
         } else {
@@ -251,25 +229,6 @@ pub fn to_dic(to_parse: String) -> ResultBencoding<TupleDicRest> {
     }
 
     Ok((dic_return, list_chars.collect()))
-}
-
-pub fn from_dic(to_bencode: HashMap<String, ValuesBencoding>) -> String {
-    let mut bencoding = String::from("d");
-
-    for (key, value) in to_bencode.into_iter() {
-        bencoding.push_str(&from_string(key));
-
-        let str_to_add = match value {
-            ValuesBencoding::String(str) => from_string(str),
-            ValuesBencoding::Integer(int) => from_integer(int),
-            ValuesBencoding::List(list) => from_list(list),
-            ValuesBencoding::Dic(dic) => from_dic(dic),
-        };
-        bencoding.push_str(&str_to_add);
-    }
-
-    bencoding.push('e');
-    bencoding
 }
 
 #[cfg(test)]
@@ -608,106 +567,6 @@ mod tests {
                 Err(ErrorBencoding::Integer(ErrorType::Number)),
                 to_dic(bencoding)
             );
-        }
-    }
-    mod tests_from_string {
-        use super::*;
-        #[test]
-        fn from_string_create_ok() {
-            let to_bencode = String::from("Test");
-            let result_expected = String::from("4:Test");
-            assert_eq!(result_expected, from_string(to_bencode));
-
-            let to_bencode = String::from("Interstellar");
-            let result_expected = String::from("12:Interstellar");
-            assert_eq!(result_expected, from_string(to_bencode));
-
-            let to_bencode = String::from("");
-            let result_expected = String::from("0:");
-            assert_eq!(result_expected, from_string(to_bencode));
-        }
-    }
-    mod tests_from_integer {
-        use super::*;
-        #[test]
-        fn from_integer_create_positive_ok() {
-            let number = 5;
-            let bencoding_expected = String::from("i5e");
-            assert_eq!(bencoding_expected, from_integer(number));
-
-            let number = 276498;
-            let bencoding_expected = String::from("i276498e");
-            assert_eq!(bencoding_expected, from_integer(number));
-
-            let number = 11234985784903;
-            let bencoding_expected = String::from("i11234985784903e");
-            assert_eq!(bencoding_expected, from_integer(number));
-        }
-        #[test]
-        fn from_integer_create_negative_ok() {
-            let number = -9;
-            let bencoding_expected = String::from("i-9e");
-            assert_eq!(bencoding_expected, from_integer(number));
-
-            let number = -2349874;
-            let bencoding_expected = String::from("i-2349874e");
-            assert_eq!(bencoding_expected, from_integer(number));
-
-            let number = -109843209420938;
-            let bencoding_expected = String::from("i-109843209420938e");
-            assert_eq!(bencoding_expected, from_integer(number));
-        }
-        #[test]
-        fn from_integer_create_zero_ok() {
-            let number = 0;
-            let bencoding_expected = String::from("i0e");
-            assert_eq!(bencoding_expected, from_integer(number));
-
-            let number = -0;
-            let bencoding_expected = String::from("i0e");
-            assert_eq!(bencoding_expected, from_integer(number));
-        }
-    }
-    mod tests_from_list {
-        use super::*;
-        #[test]
-        fn from_list_create_ok() {
-            let str_list = ValuesBencoding::String("Init".to_owned());
-            let int_list = ValuesBencoding::Integer(123);
-            let list = vec![str_list, int_list];
-            let expected_bencoding = String::from("l4:Initi123ee");
-
-            assert_eq!(expected_bencoding, from_list(list));
-        }
-        #[test]
-        fn from_list_create_with_list_inside_ok() {
-            let str_list = ValuesBencoding::String("Init".to_owned());
-            let int_list = ValuesBencoding::Integer(123);
-            let list = vec![str_list, int_list];
-
-            let str_list = ValuesBencoding::String("Fin".to_owned());
-            let int_list = ValuesBencoding::Integer(-125);
-            let list_inside = vec![int_list, ValuesBencoding::List(list), str_list];
-
-            let expected_bencoding = String::from("li-125el4:Initi123ee3:Fine");
-
-            assert_eq!(expected_bencoding, from_list(list_inside));
-        }
-    }
-    mod tests_from_dic {
-        use super::*;
-        #[test]
-        fn from_dic_create_ok() {
-            let mut dic = HashMap::new();
-            let rest = String::from("");
-            dic.insert("A".to_owned(), ValuesBencoding::String("Meta".to_owned()));
-            dic.insert("B".to_owned(), ValuesBencoding::Integer(-125));
-            dic.insert("C".to_owned(), ValuesBencoding::Integer(0));
-            dic.insert("D".to_owned(), ValuesBencoding::String("Fin".to_owned()));
-
-            let bencoding = from_dic(dic.clone());
-
-            assert_eq!(to_dic(bencoding), Ok((dic, rest)));
         }
     }
 }
