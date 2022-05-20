@@ -192,7 +192,7 @@ pub fn to_list(to_parse: String) -> ResultBencoding<TupleListRest> {
 /// el cual contendra una tupla con el diccionario como primer valor y el sobrante del string del bencoding pasado como segundo
 /// valor, en caso de error se devolvera el correspondiente
 pub fn to_dic(to_parse: String) -> ResultBencoding<TupleDicRest> {
-    let mut dic_return: HashMap<String, ValuesBencoding> = HashMap::new();
+    let mut dic_return = HashMap::new();
     let mut valid_format = false;
     let mut list_chars = to_parse.chars();
 
@@ -491,6 +491,90 @@ mod tests {
             let rest_expected = String::from("3:exe");
 
             assert_eq!(Ok((dic_expected, rest_expected)), to_dic(bencoding));
+        }
+        #[test]
+        fn to_dic_create_with_list_inside_ok() {
+            let bencoding = String::from("d8:announceli32ei-12ei0e4:abcde4:test3:exee3:exe");
+            let mut dic_expected = HashMap::new();
+            let list = vec![
+                ValuesBencoding::Integer(32),
+                ValuesBencoding::Integer(-12),
+                ValuesBencoding::Integer(0),
+                ValuesBencoding::String("abcd".to_owned()),
+            ];
+            dic_expected.insert("announce".to_owned(), ValuesBencoding::List(list));
+            dic_expected.insert("test".to_owned(), ValuesBencoding::String("exe".to_owned()));
+            let rest_expected = String::from("3:exe");
+
+            assert_eq!(Ok((dic_expected, rest_expected)), to_dic(bencoding));
+        }
+        #[test]
+        fn to_dic_create_with_dic_inside_ok() {
+            let bencoding = String::from("d8:announced4:abcdi32ee4:test3:exee3:exe");
+            let mut dic_expected = HashMap::new();
+            let mut dic = HashMap::new();
+            dic.insert("abcd".to_owned(), ValuesBencoding::Integer(32));
+            dic_expected.insert("announce".to_owned(), ValuesBencoding::Dic(dic));
+            dic_expected.insert("test".to_owned(), ValuesBencoding::String("exe".to_owned()));
+            let rest_expected = String::from("3:exe");
+
+            assert_eq!(Ok((dic_expected, rest_expected)), to_dic(bencoding));
+        }
+        #[test]
+        fn to_dic_create_complex_ok() {
+            //Test mas complejo de tener un diccionario con una lista, un diccionario, un diccionario con listas
+            //y una lista con diccionario
+            let bencoding = String::from("d4:listl1:A1:B1:Ci32ei0ee3:dicd1:Ai-125e1:Bi100e1:C3:fine8:dic_listd1:Ali1ei2ei3ee1:Bli-1ei-2ei-3eee8:list_dicld1:Ai32e1:Bi-125eeee");
+
+            let mut dic_expected = HashMap::new();
+
+            let a = String::from("A");
+            let b = String::from("B");
+            let c = String::from("C");
+            let list = vec![
+                ValuesBencoding::String(a.clone()),
+                ValuesBencoding::String(b.clone()),
+                ValuesBencoding::String(c.clone()),
+                ValuesBencoding::Integer(32),
+                ValuesBencoding::Integer(0),
+            ];
+
+            dic_expected.insert("list".to_owned(), ValuesBencoding::List(list));
+
+            let mut dic = HashMap::new();
+
+            dic.insert(a.clone(), ValuesBencoding::Integer(-125));
+            dic.insert(b.clone(), ValuesBencoding::Integer(100));
+            dic.insert(c.clone(), ValuesBencoding::String("fin".to_owned()));
+
+            dic_expected.insert("dic".to_owned(), ValuesBencoding::Dic(dic));
+
+            let list1 = vec![
+                ValuesBencoding::Integer(1),
+                ValuesBencoding::Integer(2),
+                ValuesBencoding::Integer(3),
+            ];
+            let list2 = vec![
+                ValuesBencoding::Integer(-1),
+                ValuesBencoding::Integer(-2),
+                ValuesBencoding::Integer(-3),
+            ];
+
+            let mut dic_list = HashMap::new();
+            dic_list.insert(a.clone(), ValuesBencoding::List(list1));
+            dic_list.insert(b.clone(), ValuesBencoding::List(list2));
+
+            dic_expected.insert("dic_list".to_owned(), ValuesBencoding::Dic(dic_list));
+
+            let mut dic_in_list = HashMap::new();
+            dic_in_list.insert(a.clone(), ValuesBencoding::Integer(32));
+            dic_in_list.insert(b.clone(), ValuesBencoding::Integer(-125));
+
+            let list_dic = vec![ValuesBencoding::Dic(dic_in_list)];
+
+            dic_expected.insert("list_dic".to_owned(), ValuesBencoding::List(list_dic));
+
+            assert_eq!(Ok((dic_expected, "".to_owned())), to_dic(bencoding))
         }
         #[test]
         fn to_dic_invalid_format() {
