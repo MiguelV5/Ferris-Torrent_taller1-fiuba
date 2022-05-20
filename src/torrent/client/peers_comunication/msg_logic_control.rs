@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::torrent::data::tracker_response_data::TrackerResponsePeerData;
 use crate::torrent::parsers::p2p::message::*;
 use crate::torrent::{client::Client, parsers::p2p};
 use std::{io::Write, net::TcpStream};
@@ -13,18 +14,42 @@ pub enum MsgLogicControlError {
     ConectingWithPeerError(String),
 }
 
-fn handle_client_comunication(peer_client: Client) -> Result<(), MsgLogicControlError> {
-    //habria que ver si lo que nos pasan es una refernecia o el ownership
-
-    //conexion con un peer
-    let peer_data = match peer_client.tracker_response.peers.get(0) {
+fn start_connection_with_peers(
+    peer_list: &[TrackerResponsePeerData],
+) -> Result<TcpStream, MsgLogicControlError> {
+    let peer_data = match peer_list.get(0) {
         Some(peer_data) => peer_data,
-        None => return Ok(()), //ver
+        None => {
+            return Err(MsgLogicControlError::ConectingWithPeerError(String::from(
+                "",
+            )))
+        } // revisar return
     };
     let peer_address = &peer_data.peer_address;
     //cambiar el texto dentro del error.
-    let mut stream = TcpStream::connect(peer_address)
+    let stream = TcpStream::connect(peer_address)
         .map_err(|error| MsgLogicControlError::ConectingWithPeerError(format!("{:?}", error)))?;
+    Ok(stream)
+}
+
+// Notas
+// Miguel y Luciano: En el google docs se tiene que antes de establecer conexion con peers se debe ver como viene la
+//  lista de peers segun clave compact de la respuesta del tracker.
+//  Esto en realidad es, justamente, responsabilidad de lo que se encargue de recibir la info del tracker.
+//
+// Miguel: Estuve releyendo el proceso y esta funcion en realidad seria algo como la entrada principal a toda la logica de conexion.
+//  O sea, necesitamos una funcion (esta misma) que deberia establecer y manejar la conexion con todos los peers (o con los necesarios)
+//  y luego hacer algo asi como llamar a una funcion que se encargue de hacer todo el protocolo de leecher con distintos peers en threads.
+//
+// Miguel: Me parece que es medio redundante y confuso tener una estructura Client que solo guarda la info que nos dio el tracker.
+pub fn handle_client_comunication(peer_client: Client) -> Result<(), MsgLogicControlError> {
+    //habria que ver si lo que nos pasan es una refernecia o el ownership
+
+    //conexion con un peer
+    let mut stream = match start_connection_with_peers(&peer_client.tracker_response.peers) {
+        Ok(stream) => stream,
+        Err(err) => return Err(err), //revisar despues cuando tengamos más peers, no deberiamos salir de la funcion si uno solo de los peers no se pudo conectar por ejemplo.
+    };
 
     //envio un handshake
     //esto lo deberia hacer el sender igual
@@ -33,8 +58,11 @@ fn handle_client_comunication(peer_client: Client) -> Result<(), MsgLogicControl
         info_hash: [0; 20].to_vec(),
         peer_id: "-FA0001-000000000000".to_string(), //los numeros son aleatorios
     })
-    .unwrap();
-    stream.write_all(&handshake_bytes).unwrap();
+    .map_err(|error| MsgLogicControlError::ConectingWithPeerError(format!("{:?}", error)))?; //En realidad es otro tipo de error, revisar. Por ahi estaria mejor hacer que este MsgLogicControlError sea llamado ClientError, y que tenga un generic en vez de un String asi se le puede enganchar un P2PMessageError por ejemplo.
+
+    stream
+        .write_all(&handshake_bytes)
+        .map_err(|error| MsgLogicControlError::ConectingWithPeerError(format!("{:?}", error)))?; //En realidad es otro tipo de error, revisar.
 
     //de ahora en mas me quedo recibiendo mensajes nomas y en base a eso accciono.
 
@@ -46,7 +74,7 @@ fn handle_client_comunication(peer_client: Client) -> Result<(), MsgLogicControl
 #[cfg(test)]
 mod test_msg_logic_control {
     use super::*;
-    use crate::torrent::client::data::tracker_response_data::{
+    use crate::torrent::data::tracker_response_data::{
         TrackerResponseData, TrackerResponsePeerData,
     };
     use crate::torrent::{client::Client, parsers::p2p};

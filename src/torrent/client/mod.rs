@@ -1,7 +1,6 @@
-pub mod data;
 pub mod peers_comunication;
 
-use self::data::tracker_response_data::TrackerResponseData;
+use crate::torrent::data::tracker_response_data::TrackerResponseData;
 pub struct Client {
     tracker_response: TrackerResponseData,
 }
