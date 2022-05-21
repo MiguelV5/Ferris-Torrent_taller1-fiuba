@@ -1,3 +1,5 @@
+use std::{error::Error, fmt};
+
 #[derive(PartialEq, Debug, Clone)]
 /// Representa el estado de una pieza para uso en mensaje P2P Bitfield
 pub enum PieceStatus {
@@ -54,3 +56,11 @@ pub enum P2PMessageError {
     InterpretationError,
     InvalidProtocolStrError,
 }
+
+impl fmt::Display for P2PMessageError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error: {:?}", self)
+    }
+}
+
+impl Error for P2PMessageError {}

@@ -3,7 +3,7 @@
 //!  que esta en el formato Bencoding
 #![allow(dead_code)]
 use super::constants::*;
-use super::values::ValuesBencoding;
+use super::values::*;
 use std::collections::HashMap;
 
 type TupleStringRest = (String, String);
@@ -17,23 +17,6 @@ const MINUS: char = '-';
 const ZERO: char = '0';
 
 type ResultBencoding<T> = Result<T, ErrorBencoding>;
-
-///Enumerado de los distos tipos que pueden dar error con su descripcion de error dentro
-#[derive(PartialEq, Debug)]
-pub enum ErrorBencoding {
-    String(ErrorType),
-    Integer(ErrorType),
-    List(ErrorType),
-    Dic(ErrorType),
-}
-
-///Enumerado de los posibles errores al desencodear
-#[derive(PartialEq, Debug)]
-pub enum ErrorType {
-    Format,
-    Long,
-    Number,
-}
 
 ///Funcion que dado un String en formato bencoding va a desencodear a String y luego va a devolver un Result
 /// de una tupla con el String desencodeado y lo que sobre del String pasado, o en caso de error se devolvera

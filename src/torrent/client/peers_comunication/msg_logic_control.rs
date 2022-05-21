@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 use crate::torrent::data::tracker_response_data::TrackerResponsePeerData;
 use crate::torrent::parsers::p2p::message::*;
-use crate::torrent::{client::Client, parsers::p2p};
+use crate::torrent::{client::client_struct::*, parsers::p2p};
+use std::error::Error;
 use std::{io::Write, net::TcpStream};
 
 // otra manera de hacer un socket address:
@@ -9,26 +10,17 @@ use std::{io::Write, net::TcpStream};
 
 pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
 
-#[derive(PartialEq, Debug)]
-pub enum MsgLogicControlError {
-    ConectingWithPeerError(String),
-}
-
 fn start_connection_with_peers(
     peer_list: &[TrackerResponsePeerData],
-) -> Result<TcpStream, MsgLogicControlError> {
+) -> Result<TcpStream, ClientError> {
     let peer_data = match peer_list.get(0) {
         Some(peer_data) => peer_data,
-        None => {
-            return Err(MsgLogicControlError::ConectingWithPeerError(String::from(
-                "",
-            )))
-        } // revisar return
+        None => return Err(ClientError::ConectingWithPeerError(String::from(""))), // revisar return
     };
     let peer_address = &peer_data.peer_address;
     //cambiar el texto dentro del error.
     let stream = TcpStream::connect(peer_address)
-        .map_err(|error| MsgLogicControlError::ConectingWithPeerError(format!("{:?}", error)))?;
+        .map_err(|error| ClientError::ConectingWithPeerError(format!("{:?}", error)))?;
     Ok(stream)
 }
 
@@ -42,13 +34,13 @@ fn start_connection_with_peers(
 //  y luego hacer algo asi como llamar a una funcion que se encargue de hacer todo el protocolo de leecher con distintos peers en threads.
 //
 // Miguel: Me parece que es medio redundante y confuso tener una estructura Client que solo guarda la info que nos dio el tracker.
-pub fn handle_client_comunication(peer_client: Client) -> Result<(), MsgLogicControlError> {
+pub fn handle_client_comunication(peer_client: Client) -> Result<(), Box<dyn Error>> {
     //habria que ver si lo que nos pasan es una refernecia o el ownership
 
     //conexion con un peer
     let mut stream = match start_connection_with_peers(&peer_client.tracker_response.peers) {
         Ok(stream) => stream,
-        Err(err) => return Err(err), //revisar despues cuando tengamos más peers, no deberiamos salir de la funcion si uno solo de los peers no se pudo conectar por ejemplo.
+        Err(err) => return Err(Box::new(err)), //revisar despues cuando tengamos más peers, no deberiamos salir de la funcion si uno solo de los peers no se pudo conectar por ejemplo.
     };
 
     //envio un handshake
@@ -57,12 +49,9 @@ pub fn handle_client_comunication(peer_client: Client) -> Result<(), MsgLogicCon
         protocol_str: "BitTorrent protocol".to_string(),
         info_hash: [0; 20].to_vec(),
         peer_id: "-FA0001-000000000000".to_string(), //los numeros son aleatorios
-    })
-    .map_err(|error| MsgLogicControlError::ConectingWithPeerError(format!("{:?}", error)))?; //En realidad es otro tipo de error, revisar. Por ahi estaria mejor hacer que este MsgLogicControlError sea llamado ClientError, y que tenga un generic en vez de un String asi se le puede enganchar un P2PMessageError por ejemplo.
+    })?; //En realidad es otro tipo de error, revisar. Por ahi estaria mejor hacer que este ClientError sea llamado ClientError, y que tenga un generic en vez de un String asi se le puede enganchar un P2PMessageError por ejemplo.
 
-    stream
-        .write_all(&handshake_bytes)
-        .map_err(|error| MsgLogicControlError::ConectingWithPeerError(format!("{:?}", error)))?; //En realidad es otro tipo de error, revisar.
+    stream.write_all(&handshake_bytes)?; //En realidad es otro tipo de error, revisar.
 
     //de ahora en mas me quedo recibiendo mensajes nomas y en base a eso accciono.
 
@@ -77,7 +66,7 @@ mod test_msg_logic_control {
     use crate::torrent::data::tracker_response_data::{
         TrackerResponseData, TrackerResponsePeerData,
     };
-    use crate::torrent::{client::Client, parsers::p2p};
+    use crate::torrent::parsers::p2p;
     use std::io::Read;
     use std::net::{SocketAddr, TcpListener};
     use std::str::FromStr;
