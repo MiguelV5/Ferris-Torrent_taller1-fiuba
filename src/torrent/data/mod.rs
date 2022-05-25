@@ -1,3 +1,4 @@
+pub mod client_data;
 pub mod medatada_analyzer;
 pub mod peers_data;
 pub mod torrent_file_data;

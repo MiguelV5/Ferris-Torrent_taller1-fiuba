@@ -7,7 +7,7 @@ pub enum PieceStatus {
     MissingPiece,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 /// Representa un mensaje de comunicación P2P.
 pub enum P2PMessage {
     KeepAlive,
@@ -47,20 +47,34 @@ pub enum P2PMessage {
 }
 
 #[derive(PartialEq, Debug)]
-/// Representa un tipo de error en la interpretacion de mensajes P2P
-pub enum P2PMessageError {
-    ByteAmountError,
-    FromUsizeToU32Error,
-    FromBytesToStringError,
-    InvalidIdError,
-    InterpretationError,
-    InvalidProtocolStrError,
+/// Representa un tipo de error en la DECODIFICACION de mensajes P2P
+pub enum P2PMessageDecodingError {
+    ByteAmountError(String),
+    FromUsizeToU32Error(String),
+    FromBytesToStringError(String),
+    InvalidIdError(String),
+    InvalidProtocolStrError(String),
 }
 
-impl fmt::Display for P2PMessageError {
+impl fmt::Display for P2PMessageDecodingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error: {:?}", self)
+        write!(f, "{:?}", self)
     }
 }
 
-impl Error for P2PMessageError {}
+impl Error for P2PMessageDecodingError {}
+
+#[derive(PartialEq, Debug)]
+/// Representa un tipo de error en la ENCODIFICACION de mensajes P2P
+pub enum P2PMessageEncodingError {
+    FromUsizeToU32Error(String),
+    InvalidProtocolStrError(String),
+}
+
+impl fmt::Display for P2PMessageEncodingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Error for P2PMessageEncodingError {}

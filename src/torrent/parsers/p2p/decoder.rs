@@ -5,12 +5,14 @@ use super::message::*;
 /// A partir de 4 bytes (u8) recibidos en un slice, devuelve la "concatenacion" de dichos bytes para formar un u32 completo.
 /// Tener en cuenta que el slice de bytes esperado debe estar ordenado a modo big endian.
 ///
-/// Devuelve un Result donde la variante Ok es el u32, y la variante Err es un P2PMessageError
+/// Devuelve un Result donde la variante Ok es el u32, y la variante Err es un P2PMessageDecodingError
 ///
 ///
-fn concatenate_bytes_into_u32(bytes: &[u8]) -> Result<u32, P2PMessageError> {
+pub fn concatenate_bytes_into_u32(bytes: &[u8]) -> Result<u32, P2PMessageDecodingError> {
     if bytes.len() != NEEDED_NUM_OF_BYTES_TO_CONCATENATE {
-        return Err(P2PMessageError::ByteAmountError);
+        return Err(P2PMessageDecodingError::ByteAmountError(
+            "[P2PMessageDecodingError] Invalid amount of bytes to concatenate into an u32 (4 are required)".to_string()
+        ));
     }
 
     let mut concatenation = u32::from(bytes[0]);
@@ -52,12 +54,20 @@ fn is_handshake(bytes: &[u8]) -> bool {
 ///
 /// Tener en cuenta que el slice de bytes esperado debe estar ordenado a modo big endian.
 ///
-fn try_decode_handshake_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
-    let protocol_str = String::from_utf8(bytes[1..20].to_vec())
-        .map_err(|_e| P2PMessageError::FromBytesToStringError)?;
+fn try_decode_handshake_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
+    let protocol_str = String::from_utf8(bytes[1..20].to_vec()).map_err(|err| {
+        P2PMessageDecodingError::FromBytesToStringError(format!(
+            "[P2PMessageDecodingError] {:?}",
+            err
+        ))
+    })?;
     let info_hash = bytes[28..48].to_vec();
-    let peer_id = String::from_utf8(bytes[48..68].to_vec())
-        .map_err(|_e| P2PMessageError::FromBytesToStringError)?;
+    let peer_id = String::from_utf8(bytes[48..68].to_vec()).map_err(|err| {
+        P2PMessageDecodingError::FromBytesToStringError(format!(
+            "[P2PMessageDecodingError] {:?}",
+            err
+        ))
+    })?;
     Ok(P2PMessage::Handshake {
         protocol_str,
         info_hash,
@@ -66,7 +76,7 @@ fn try_decode_handshake_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessa
 }
 
 ///
-/// A partir de una cadena de bytes (u8) recibidos en un slice y un entero de 32 bits no signado que representa el lenght_prefix de un mensaje p2p, devuelve un tipo de dato Result<book, P2PMessageError>.
+/// A partir de una cadena de bytes (u8) recibidos en un slice y un entero de 32 bits no signado que representa el lenght_prefix de un mensaje p2p, devuelve un tipo de dato Result<book, P2PMessageDecodingError>.
 /// Este booleno devuelto significa:
 /// true   -> si la cantidad de bytes que hay en el slice para generar un mensaje p2p es la correcta.
 /// falsea -> en caso contrario
@@ -74,10 +84,13 @@ fn try_decode_handshake_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessa
 fn has_the_correct_number_of_bytes(
     bytes: &[u8],
     lenght_prefix: u32,
-) -> Result<bool, P2PMessageError> {
+) -> Result<bool, P2PMessageDecodingError> {
     match u32::try_from(bytes.len() - NUM_OF_BYTES_LENGHT_PREFIX) {
         Ok(bytes_lenght) => Ok(bytes_lenght == lenght_prefix),
-        Err(_e) => Err(P2PMessageError::FromUsizeToU32Error),
+        Err(err) => Err(P2PMessageDecodingError::FromUsizeToU32Error(format!(
+            "[P2PMessageDecodingError] {:?}",
+            err
+        ))),
     }
 }
 
@@ -116,7 +129,7 @@ fn decode_bitfield_p2p_message(bytes: &[u8]) -> P2PMessage {
 ///
 /// Tener en cuenta que el slice de bytes esperado debe estar ordenado a modo big endian.
 ///
-fn try_decode_have_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
+fn try_decode_have_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     let piece_index = concatenate_bytes_into_u32(&bytes[0..4])?;
     Ok(P2PMessage::Have { piece_index })
 }
@@ -128,7 +141,7 @@ fn try_decode_have_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageErr
 ///
 /// Tener en cuenta que el slice de bytes esperado debe estar ordenado a modo big endian.
 ///
-fn try_decode_request_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
+fn try_decode_request_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     let piece_index = concatenate_bytes_into_u32(&bytes[0..4])?;
     let beginning_byte_index = concatenate_bytes_into_u32(&bytes[4..8])?;
     let amount_of_bytes = concatenate_bytes_into_u32(&bytes[8..12])?;
@@ -146,7 +159,7 @@ fn try_decode_request_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessage
 ///
 /// Tener en cuenta que el slice de bytes esperado debe estar ordenado a modo big endian.
 ///
-fn try_decode_piece_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
+fn try_decode_piece_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     let piece_index = concatenate_bytes_into_u32(&bytes[0..4])?;
     let beginning_byte_index = concatenate_bytes_into_u32(&bytes[4..8])?;
     let block = bytes[8..].to_vec();
@@ -164,7 +177,7 @@ fn try_decode_piece_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageEr
 ///
 /// Tener en cuenta que el slice de bytes esperado debe estar ordenado a modo big endian.
 ///
-fn try_decode_cancel_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
+fn try_decode_cancel_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     let piece_index = concatenate_bytes_into_u32(&bytes[0..4])?;
     let beginning_byte_index = concatenate_bytes_into_u32(&bytes[4..8])?;
     let amount_of_bytes = concatenate_bytes_into_u32(&bytes[8..12])?;
@@ -182,7 +195,7 @@ fn try_decode_cancel_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageE
 ///
 /// Tener en cuenta que el slice de bytes esperado debe estar ordenado a modo big endian.
 ///
-fn try_decode_port_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
+fn try_decode_port_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     let port_bytes = [0u8, 0u8, bytes[0], bytes[1]];
     let port_value = concatenate_bytes_into_u32(&port_bytes)?;
     Ok(P2PMessage::Port {
@@ -193,8 +206,8 @@ fn try_decode_port_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageErr
 // Matchea la id del mensaje p2p con su representacion correspondiente.
 // Devuelve un Result tal que:
 // - El Ok value es una variante de P2PMessage segun sea adecuado.
-// - El Err value es una variante de P2PMessageError si no se pudo interpretar el mensaje.
-fn match_p2p_msg_according_to_id(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
+// - El Err value es una variante de P2PMessageDecodingError si no se pudo interpretar el mensaje.
+fn match_p2p_msg_according_to_id(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     let id_byte = bytes[4];
 
     match id_byte {
@@ -208,13 +221,18 @@ fn match_p2p_msg_according_to_id(bytes: &[u8]) -> Result<P2PMessage, P2PMessageE
         ID_PIECE => try_decode_piece_p2p_message(&bytes[5..]),
         ID_CANCEL => try_decode_cancel_p2p_message(&bytes[5..]),
         ID_PORT => try_decode_port_p2p_message(&bytes[5..]),
-        _ => Err(P2PMessageError::InvalidIdError),
+        _ => Err(P2PMessageDecodingError::InvalidIdError(
+            "[P2PMessageDecodingError] Tried to decode a message with invalid ID".to_string(),
+        )),
     }
 }
 
+// Determina cual es tipo de mensaje p2p en base a los bytes recibidos y al lenght_prefix. El lenght_prefix almacena la informacion sobre la cantidad de bytes que deben ser leidos para formar el mensaje correctamente.
 //
-//
-fn determinate_p2p_msg(bytes: &[u8], lenght_prefix: u32) -> Result<P2PMessage, P2PMessageError> {
+fn determinate_p2p_msg(
+    bytes: &[u8],
+    lenght_prefix: u32,
+) -> Result<P2PMessage, P2PMessageDecodingError> {
     if lenght_prefix == 0 {
         Ok(P2PMessage::KeepAlive)
     } else {
@@ -225,7 +243,7 @@ fn determinate_p2p_msg(bytes: &[u8], lenght_prefix: u32) -> Result<P2PMessage, P
 /// Recibe un slice con todos los bytes correspondientes a un mensaje P2P a interpretar.
 /// Devuelve un Result tal que:
 /// - El Ok value es una variante de P2PMessage segun sea adecuado tras interpretar los bytes.
-/// - El Err value es una variante de P2PMessageError si no se pudo interpretar el mensaje.
+/// - El Err value es una variante de P2PMessageDecodingError si no se pudo interpretar el mensaje.
 ///
 /// # Ejemplo de uso básico:
 ///
@@ -243,9 +261,11 @@ fn determinate_p2p_msg(bytes: &[u8], lenght_prefix: u32) -> Result<P2PMessage, P
 /// );
 /// ```
 ///
-pub fn from_bytes(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
+pub fn from_bytes(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     if bytes.len() < MIN_BYTES_OF_A_P2P_MSG {
-        return Err(P2PMessageError::ByteAmountError);
+        return Err(P2PMessageDecodingError::ByteAmountError(
+            "[P2PMessageDecodingError] The P2P msg to decode does not have enough bytes (min. 4 required)".to_string()
+        ));
     }
 
     if is_handshake(bytes) {
@@ -254,7 +274,9 @@ pub fn from_bytes(bytes: &[u8]) -> Result<P2PMessage, P2PMessageError> {
 
     let lenght_prefix = concatenate_bytes_into_u32(&bytes[0..4])?;
     if !has_the_correct_number_of_bytes(bytes, lenght_prefix)? {
-        Err(P2PMessageError::ByteAmountError)
+        Err(P2PMessageDecodingError::ByteAmountError(
+            "[P2PMessageDecodingError] The true length of the P2P msg does not match the one given in the length prefix".to_string()
+        ))
     } else {
         determinate_p2p_msg(bytes, lenght_prefix)
     }
@@ -271,7 +293,9 @@ mod tests_p2p_decoder {
         fn concatenate_bytes_into_u32_from_less_than_four_bytes_error() {
             let bytes = [0];
             assert_eq!(
-                Err(P2PMessageError::ByteAmountError),
+                Err(P2PMessageDecodingError::ByteAmountError(format!(
+                    "[P2PMessageDecodingError] Invalid amount of bytes to concatenate into an u32 (4 are required)"
+                ))),
                 concatenate_bytes_into_u32(&bytes)
             );
         }
@@ -280,7 +304,9 @@ mod tests_p2p_decoder {
         fn concatenate_bytes_into_u32_from_more_than_four_bytes_error() {
             let bytes = [0, 0, 0, 1, 2];
             assert_eq!(
-                Err(P2PMessageError::ByteAmountError),
+                Err(P2PMessageDecodingError::ByteAmountError(format!(
+                    "[P2PMessageDecodingError] Invalid amount of bytes to concatenate into an u32 (4 are required)"
+                ))),
                 concatenate_bytes_into_u32(&bytes)
             );
         }
@@ -412,7 +438,9 @@ mod tests_p2p_decoder {
         fn decode_less_than_four_bytes_error() {
             let p2p_msg_bytes = [0];
             assert_eq!(
-                Err(P2PMessageError::ByteAmountError),
+                Err(P2PMessageDecodingError::ByteAmountError(format!(
+                    "[P2PMessageDecodingError] The P2P msg to decode does not have enough bytes (min. 4 required)"
+                ))),
                 from_bytes(&p2p_msg_bytes)
             );
         }

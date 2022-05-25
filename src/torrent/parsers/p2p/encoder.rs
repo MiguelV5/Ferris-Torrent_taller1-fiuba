@@ -127,17 +127,22 @@ fn append_payload_to_encoded_bitfield(
 /// Si no hubo fallas de conversión, el Ok value es un vec de bytes de tipo:
 /// <len=0001+X><id=5><bitfield>; tal que cada uno mide:
 /// <4bytes><1byte><Xbytes>
-fn encode_bitfield(bitfield_piece_statuses: Vec<PieceStatus>) -> Result<Vec<u8>, P2PMessageError> {
+fn encode_bitfield(
+    bitfield_piece_statuses: Vec<PieceStatus>,
+) -> Result<Vec<u8>, P2PMessageEncodingError> {
     let ammount_of_bitfield_statuses = bitfield_piece_statuses.len();
     let unconverted_payload_length =
         calc_adequate_ammount_of_bitfield_bytes(ammount_of_bitfield_statuses);
 
-    let converted_payload_length_in_bytes =
-        if let Ok(converted_payload_length) = u32::try_from(unconverted_payload_length) {
-            converted_payload_length
-        } else {
-            return Err(P2PMessageError::FromUsizeToU32Error);
-        };
+    let converted_payload_length_in_bytes = match u32::try_from(unconverted_payload_length) {
+        Ok(converted_payload_length) => converted_payload_length,
+        Err(err) => {
+            return Err(P2PMessageEncodingError::FromUsizeToU32Error(format!(
+                "[P2PMessageEncodingError] {:?}",
+                err
+            )))
+        }
+    };
 
     let encoded_bitfield_capacity = NUM_OF_BYTES_LENGHT_PREFIX
         + (NEEDED_NUM_OF_BYTES_FOR_ID as usize)
@@ -201,11 +206,15 @@ fn encode_piece(
     piece_index: u32,
     beginning_byte_index: u32,
     block: Vec<u8>,
-) -> Result<Vec<u8>, P2PMessageError> {
-    let length_prefix = if let Ok(block_len) = u32::try_from(block.len()) {
-        9 + block_len
-    } else {
-        return Err(P2PMessageError::FromUsizeToU32Error);
+) -> Result<Vec<u8>, P2PMessageEncodingError> {
+    let length_prefix = match u32::try_from(block.len()) {
+        Ok(block_len) => 9 + block_len,
+        Err(err) => {
+            return Err(P2PMessageEncodingError::FromUsizeToU32Error(format!(
+                "[P2PMessageEncodingError] {:?}",
+                err
+            )))
+        }
     };
 
     let length_prefix_as_bytes = length_prefix.to_be_bytes().to_vec();
@@ -273,9 +282,11 @@ fn encode_handshake(
     protocol_str: String,
     info_hash: Vec<u8>,
     peer_id: String,
-) -> Result<Vec<u8>, P2PMessageError> {
+) -> Result<Vec<u8>, P2PMessageEncodingError> {
     if protocol_str != PSTR_STRING_HANDSHAKE {
-        return Err(P2PMessageError::InvalidProtocolStrError);
+        return Err(P2PMessageEncodingError::InvalidProtocolStrError(
+            "[P2PMessageEncodingError] Protocol was not the BitTorrent protocol".to_string(),
+        ));
     }
     let protocol_str_len = PSTRLEN_VALUE_HANDSHAKE; // Específico de protocolo BitTorrent
     let reserved_bytes = [0u8; 8];
@@ -306,7 +317,7 @@ fn encode_handshake(
 /// A partir de dicho P2PMessage, devuelve un Result tal que:
 ///
 /// - El Ok value es un vector de bytes correspondientes al mensaje para ser enviado a otro peer.
-/// - El Err value es un P2PMessageError según sea el caso.
+/// - El Err value es un P2PMessageEncodingError según sea el caso.
 ///
 /// ## Notas importantes según mensaje:
 ///
@@ -345,7 +356,7 @@ fn encode_handshake(
 /// // ... para posteriormente neviarle estos bytes a otro peer a traves de un socket.
 /// ```
 ///
-pub fn to_bytes(p2p_msg: P2PMessage) -> Result<Vec<u8>, P2PMessageError> {
+pub fn to_bytes(p2p_msg: P2PMessage) -> Result<Vec<u8>, P2PMessageEncodingError> {
     match p2p_msg {
         P2PMessage::KeepAlive => Ok(encode_keep_alive()),
         P2PMessage::Choke => Ok(encode_choke()),

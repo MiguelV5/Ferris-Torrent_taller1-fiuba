@@ -2,10 +2,13 @@
 
 use std::net::SocketAddr;
 
+#[derive(PartialEq, Debug, Clone)]
 pub struct TrackerResponsePeerData {
     pub peer_id: Option<String>,
     pub peer_address: SocketAddr,
 }
+
+#[derive(PartialEq, Debug, Clone)]
 
 pub struct TrackerResponseData {
     pub interval: u32,
