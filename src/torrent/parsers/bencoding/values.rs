@@ -6,10 +6,10 @@ use std::{collections::HashMap, error::Error, fmt};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum ValuesBencoding {
-    String(String),
+    String(Vec<u8>),
     Integer(i64),
     List(Vec<ValuesBencoding>),
-    Dic(HashMap<String, ValuesBencoding>),
+    Dic(HashMap<Vec<u8>, ValuesBencoding>),
 }
 
 ///Enumerado de los distos tipos que pueden dar error con su descripcion de error dentro

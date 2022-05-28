@@ -10,7 +10,7 @@ use super::message::*;
 ///
 pub fn concatenate_bytes_into_u32(bytes: &[u8]) -> Result<u32, P2PMessageDecodingError> {
     if bytes.len() != NEEDED_NUM_OF_BYTES_TO_CONCATENATE {
-        return Err(P2PMessageDecodingError::ByteAmountError(
+        return Err(P2PMessageDecodingError::ByteAmount(
             "[P2PMessageDecodingError] Invalid amount of bytes to concatenate into an u32 (4 are required)".to_string()
         ));
     }
@@ -56,17 +56,11 @@ fn is_handshake(bytes: &[u8]) -> bool {
 ///
 fn try_decode_handshake_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     let protocol_str = String::from_utf8(bytes[1..20].to_vec()).map_err(|err| {
-        P2PMessageDecodingError::FromBytesToStringError(format!(
-            "[P2PMessageDecodingError] {:?}",
-            err
-        ))
+        P2PMessageDecodingError::FromBytesToString(format!("[P2PMessageDecodingError] {:?}", err))
     })?;
     let info_hash = bytes[28..48].to_vec();
     let peer_id = String::from_utf8(bytes[48..68].to_vec()).map_err(|err| {
-        P2PMessageDecodingError::FromBytesToStringError(format!(
-            "[P2PMessageDecodingError] {:?}",
-            err
-        ))
+        P2PMessageDecodingError::FromBytesToString(format!("[P2PMessageDecodingError] {:?}", err))
     })?;
     Ok(P2PMessage::Handshake {
         protocol_str,
@@ -87,7 +81,7 @@ fn has_the_correct_number_of_bytes(
 ) -> Result<bool, P2PMessageDecodingError> {
     match u32::try_from(bytes.len() - NUM_OF_BYTES_LENGHT_PREFIX) {
         Ok(bytes_lenght) => Ok(bytes_lenght == lenght_prefix),
-        Err(err) => Err(P2PMessageDecodingError::FromUsizeToU32Error(format!(
+        Err(err) => Err(P2PMessageDecodingError::FromUsizeToU32(format!(
             "[P2PMessageDecodingError] {:?}",
             err
         ))),
@@ -221,7 +215,7 @@ fn match_p2p_msg_according_to_id(bytes: &[u8]) -> Result<P2PMessage, P2PMessageD
         ID_PIECE => try_decode_piece_p2p_message(&bytes[5..]),
         ID_CANCEL => try_decode_cancel_p2p_message(&bytes[5..]),
         ID_PORT => try_decode_port_p2p_message(&bytes[5..]),
-        _ => Err(P2PMessageDecodingError::InvalidIdError(
+        _ => Err(P2PMessageDecodingError::InvalidId(
             "[P2PMessageDecodingError] Tried to decode a message with invalid ID".to_string(),
         )),
     }
@@ -263,7 +257,7 @@ fn determinate_p2p_msg(
 ///
 pub fn from_bytes(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     if bytes.len() < MIN_BYTES_OF_A_P2P_MSG {
-        return Err(P2PMessageDecodingError::ByteAmountError(
+        return Err(P2PMessageDecodingError::ByteAmount(
             "[P2PMessageDecodingError] The P2P msg to decode does not have enough bytes (min. 4 required)".to_string()
         ));
     }
@@ -274,7 +268,7 @@ pub fn from_bytes(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
 
     let lenght_prefix = concatenate_bytes_into_u32(&bytes[0..4])?;
     if !has_the_correct_number_of_bytes(bytes, lenght_prefix)? {
-        Err(P2PMessageDecodingError::ByteAmountError(
+        Err(P2PMessageDecodingError::ByteAmount(
             "[P2PMessageDecodingError] The true length of the P2P msg does not match the one given in the length prefix".to_string()
         ))
     } else {
@@ -293,7 +287,7 @@ mod tests_p2p_decoder {
         fn concatenate_bytes_into_u32_from_less_than_four_bytes_error() {
             let bytes = [0];
             assert_eq!(
-                Err(P2PMessageDecodingError::ByteAmountError(format!(
+                Err(P2PMessageDecodingError::ByteAmount(format!(
                     "[P2PMessageDecodingError] Invalid amount of bytes to concatenate into an u32 (4 are required)"
                 ))),
                 concatenate_bytes_into_u32(&bytes)
@@ -304,7 +298,7 @@ mod tests_p2p_decoder {
         fn concatenate_bytes_into_u32_from_more_than_four_bytes_error() {
             let bytes = [0, 0, 0, 1, 2];
             assert_eq!(
-                Err(P2PMessageDecodingError::ByteAmountError(format!(
+                Err(P2PMessageDecodingError::ByteAmount(format!(
                     "[P2PMessageDecodingError] Invalid amount of bytes to concatenate into an u32 (4 are required)"
                 ))),
                 concatenate_bytes_into_u32(&bytes)
@@ -438,7 +432,7 @@ mod tests_p2p_decoder {
         fn decode_less_than_four_bytes_error() {
             let p2p_msg_bytes = [0];
             assert_eq!(
-                Err(P2PMessageDecodingError::ByteAmountError(format!(
+                Err(P2PMessageDecodingError::ByteAmount(format!(
                     "[P2PMessageDecodingError] The P2P msg to decode does not have enough bytes (min. 4 required)"
                 ))),
                 from_bytes(&p2p_msg_bytes)

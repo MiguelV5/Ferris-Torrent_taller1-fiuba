@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::torrent::parsers::p2p::message::PieceStatus;
 
 #[derive(PartialEq, Debug, Clone)]

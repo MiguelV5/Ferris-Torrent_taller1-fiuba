@@ -6,11 +6,12 @@ use super::constants::*;
 use super::values::*;
 use std::collections::HashMap;
 
-type TupleStringRest = (String, Vec<u8>);
+type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
+type TupleStringRest = (Vec<u8>, Vec<u8>);
 type TupleIntegerRest = (i64, Vec<u8>);
 type TupleListRest = (Vec<ValuesBencoding>, Vec<u8>);
 type TupleValueRest = (ValuesBencoding, Vec<u8>);
-type TupleDicRest = (HashMap<String, ValuesBencoding>, Vec<u8>);
+type TupleDicRest = (DicValues, Vec<u8>);
 
 const NEGATIVE_ZERO: &str = "-0";
 const IS_TORRENT: char = 't';
@@ -24,7 +25,7 @@ type ResultBencoding<T> = Result<T, ErrorBencoding>;
 /// el mismo que sera del tipo ErrorBencoding, por ej: en caso de pasar "4:testi32e3:fin" se devolvera Ok con la tupla
 /// ("test", "i32e3:fin")
 pub fn to_string(to_parse: Vec<u8>) -> ResultBencoding<TupleStringRest> {
-    let mut result = String::new();
+    let mut result = vec![];
     let mut long_string = String::new();
     let mut valid_format = false;
 
@@ -52,7 +53,7 @@ pub fn to_string(to_parse: Vec<u8>) -> ResultBencoding<TupleStringRest> {
     //Voy concatenando caracter a caracter formando el string con la longitud que tome anteriormente
     for _ in 0..long_int {
         if let Some(char_string) = list_chars.next() {
-            result.push(char_string as char);
+            result.push(char_string);
         } else {
             return Err(ErrorBencoding::String(ErrorType::Long));
         }
@@ -215,6 +216,19 @@ pub fn to_dic(to_parse: Vec<u8>) -> ResultBencoding<TupleDicRest> {
     Ok((dic_return, list_chars.collect()))
 }
 
+pub fn from_torrent_to_dic(torrent_file: Vec<u8>) -> Result<DicValues, ErrorBencoding> {
+    match to_dic(torrent_file) {
+        Ok((result, rest)) => {
+            if rest.is_empty() {
+                Ok(result)
+            } else {
+                Err(ErrorBencoding::Dic(ErrorType::Format))
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,7 +238,7 @@ mod tests {
         fn to_string_ok() {
             let bencoding_string = String::from("3:exe");
             let bencoding_bytes = bencoding_string.as_bytes().to_vec();
-            let return_str = String::from("exe");
+            let return_str = String::from("exe").as_bytes().to_vec();
             let return_rest = vec![];
 
             let result = to_string(bencoding_bytes);
@@ -237,7 +251,7 @@ mod tests {
         fn to_string_ok_rest_valid() {
             let bencoding_string = String::from("5:magic4:testi32e");
             let bencoding_bytes = bencoding_string.as_bytes().to_vec();
-            let return_str = String::from("magic");
+            let return_str = "magic".as_bytes().to_vec();
             let return_rest = "4:testi32e".as_bytes().to_vec();
 
             let result = to_string(bencoding_bytes);
@@ -247,7 +261,7 @@ mod tests {
             assert_eq!(str, return_str);
             assert_eq!(rest, return_rest);
 
-            let return_str = String::from("test");
+            let return_str = "test".as_bytes().to_vec();
             let return_rest = "i32e".as_bytes().to_vec();
 
             let result = to_string(rest);
@@ -390,7 +404,7 @@ mod tests {
         use super::*;
         #[test]
         fn to_list_ok() {
-            let str_expected = ValuesBencoding::String(String::from("test"));
+            let str_expected = ValuesBencoding::String("test".as_bytes().to_vec());
             let int_expected = ValuesBencoding::Integer(32);
             let rest_expected = "3:exe".as_bytes().to_vec();
             let result_expected = (vec![str_expected, int_expected], rest_expected);
@@ -400,7 +414,7 @@ mod tests {
         }
         #[test]
         fn to_list_inside_list_ok() {
-            let str_expected = ValuesBencoding::String(String::from("test"));
+            let str_expected = ValuesBencoding::String("test".as_bytes().to_vec());
             let int_expected = ValuesBencoding::Integer(32);
             let vec_expected = ValuesBencoding::List(vec![str_expected, int_expected]);
             let rest_expected = "3:exe".as_bytes().to_vec();
@@ -472,8 +486,11 @@ mod tests {
         fn to_dic_create_ok() {
             let bencoding = "d8:announcei32e4:test3:exee3:exe".as_bytes().to_vec();
             let mut dic_expected = HashMap::new();
-            dic_expected.insert("announce".to_owned(), ValuesBencoding::Integer(32));
-            dic_expected.insert("test".to_owned(), ValuesBencoding::String("exe".to_owned()));
+            dic_expected.insert("announce".as_bytes().to_vec(), ValuesBencoding::Integer(32));
+            dic_expected.insert(
+                "test".as_bytes().to_vec(),
+                ValuesBencoding::String("exe".as_bytes().to_vec()),
+            );
             let rest_expected = "3:exe".as_bytes().to_vec();
 
             assert_eq!(Ok((dic_expected, rest_expected)), to_dic(bencoding));
@@ -488,10 +505,13 @@ mod tests {
                 ValuesBencoding::Integer(32),
                 ValuesBencoding::Integer(-12),
                 ValuesBencoding::Integer(0),
-                ValuesBencoding::String("abcd".to_owned()),
+                ValuesBencoding::String("abcd".as_bytes().to_vec()),
             ];
-            dic_expected.insert("announce".to_owned(), ValuesBencoding::List(list));
-            dic_expected.insert("test".to_owned(), ValuesBencoding::String("exe".to_owned()));
+            dic_expected.insert("announce".as_bytes().to_vec(), ValuesBencoding::List(list));
+            dic_expected.insert(
+                "test".as_bytes().to_vec(),
+                ValuesBencoding::String("exe".as_bytes().to_vec()),
+            );
             let rest_expected = "3:exe".as_bytes().to_vec();
 
             assert_eq!(Ok((dic_expected, rest_expected)), to_dic(bencoding));
@@ -503,9 +523,12 @@ mod tests {
                 .to_vec();
             let mut dic_expected = HashMap::new();
             let mut dic = HashMap::new();
-            dic.insert("abcd".to_owned(), ValuesBencoding::Integer(32));
-            dic_expected.insert("announce".to_owned(), ValuesBencoding::Dic(dic));
-            dic_expected.insert("test".to_owned(), ValuesBencoding::String("exe".to_owned()));
+            dic.insert("abcd".as_bytes().to_vec(), ValuesBencoding::Integer(32));
+            dic_expected.insert("announce".as_bytes().to_vec(), ValuesBencoding::Dic(dic));
+            dic_expected.insert(
+                "test".as_bytes().to_vec(),
+                ValuesBencoding::String("exe".as_bytes().to_vec()),
+            );
             let rest_expected = "3:exe".as_bytes().to_vec();
 
             assert_eq!(Ok((dic_expected, rest_expected)), to_dic(bencoding));
@@ -522,22 +545,28 @@ mod tests {
             let b = String::from("B");
             let c = String::from("C");
             let list = vec![
-                ValuesBencoding::String(a.clone()),
-                ValuesBencoding::String(b.clone()),
-                ValuesBencoding::String(c.clone()),
+                ValuesBencoding::String(a.clone().as_bytes().to_vec()),
+                ValuesBencoding::String(b.clone().as_bytes().to_vec()),
+                ValuesBencoding::String(c.clone().as_bytes().to_vec()),
                 ValuesBencoding::Integer(32),
                 ValuesBencoding::Integer(0),
             ];
 
-            dic_expected.insert("list".to_owned(), ValuesBencoding::List(list));
+            dic_expected.insert("list".as_bytes().to_vec(), ValuesBencoding::List(list));
 
             let mut dic = HashMap::new();
 
-            dic.insert(a.clone(), ValuesBencoding::Integer(-125));
-            dic.insert(b.clone(), ValuesBencoding::Integer(100));
-            dic.insert(c.clone(), ValuesBencoding::String("fin".to_owned()));
+            dic.insert(
+                a.clone().as_bytes().to_vec(),
+                ValuesBencoding::Integer(-125),
+            );
+            dic.insert(b.clone().as_bytes().to_vec(), ValuesBencoding::Integer(100));
+            dic.insert(
+                c.clone().as_bytes().to_vec(),
+                ValuesBencoding::String("fin".as_bytes().to_vec()),
+            );
 
-            dic_expected.insert("dic".to_owned(), ValuesBencoding::Dic(dic));
+            dic_expected.insert("dic".as_bytes().to_vec(), ValuesBencoding::Dic(dic));
 
             let list1 = vec![
                 ValuesBencoding::Integer(1),
@@ -551,18 +580,27 @@ mod tests {
             ];
 
             let mut dic_list = HashMap::new();
-            dic_list.insert(a.clone(), ValuesBencoding::List(list1));
-            dic_list.insert(b.clone(), ValuesBencoding::List(list2));
+            dic_list.insert(a.clone().as_bytes().to_vec(), ValuesBencoding::List(list1));
+            dic_list.insert(b.clone().as_bytes().to_vec(), ValuesBencoding::List(list2));
 
-            dic_expected.insert("dic_list".to_owned(), ValuesBencoding::Dic(dic_list));
+            dic_expected.insert(
+                "dic_list".as_bytes().to_vec(),
+                ValuesBencoding::Dic(dic_list),
+            );
 
             let mut dic_in_list = HashMap::new();
-            dic_in_list.insert(a.clone(), ValuesBencoding::Integer(32));
-            dic_in_list.insert(b.clone(), ValuesBencoding::Integer(-125));
+            dic_in_list.insert(a.clone().as_bytes().to_vec(), ValuesBencoding::Integer(32));
+            dic_in_list.insert(
+                b.clone().as_bytes().to_vec(),
+                ValuesBencoding::Integer(-125),
+            );
 
             let list_dic = vec![ValuesBencoding::Dic(dic_in_list)];
 
-            dic_expected.insert("list_dic".to_owned(), ValuesBencoding::List(list_dic));
+            dic_expected.insert(
+                "list_dic".as_bytes().to_vec(),
+                ValuesBencoding::List(list_dic),
+            );
 
             assert_eq!(Ok((dic_expected, vec![])), to_dic(bencoding))
         }

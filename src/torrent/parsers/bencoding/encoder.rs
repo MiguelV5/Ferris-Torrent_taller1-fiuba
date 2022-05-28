@@ -8,15 +8,15 @@ use std::collections::HashMap;
 
 ///Esta funcion devuelve un String en el formato Bencoding
 ///  del String que se le haya pasado
-pub fn from_string(to_bencode: String) -> Vec<u8> {
+pub fn from_string(to_bencode: Vec<u8>) -> Vec<u8> {
+    let mut to_bencode = to_bencode;
     let mut bencoding = vec![];
     let long_number = to_bencode.len() as u32;
     let mut long_str = long_number.to_string().as_bytes().to_vec();
-    let mut str = to_bencode.as_bytes().to_vec();
 
     bencoding.append(&mut long_str);
     bencoding.push(TWO_POINTS);
-    bencoding.append(&mut str);
+    bencoding.append(&mut to_bencode);
 
     bencoding
 }
@@ -50,9 +50,9 @@ pub fn from_list(to_bencode: Vec<ValuesBencoding>) -> Vec<u8> {
 }
 
 ///Esta funcion devuelve un String del formato Bencoding de el Diccionario ([HashMap]) pasado
-pub fn from_dic(to_bencode: HashMap<String, ValuesBencoding>) -> Vec<u8> {
+pub fn from_dic(to_bencode: HashMap<Vec<u8>, ValuesBencoding>) -> Vec<u8> {
     let mut bencoding = vec![CHAR_D];
-    let mut keys_vector: Vec<&String> = to_bencode.keys().collect();
+    let mut keys_vector: Vec<&Vec<u8>> = to_bencode.keys().collect();
     keys_vector.sort();
 
     for key in keys_vector.into_iter() {
@@ -79,15 +79,15 @@ mod tests {
         use super::*;
         #[test]
         fn from_string_create_ok() {
-            let to_bencode = String::from("Test");
+            let to_bencode = "Test".as_bytes().to_vec();
             let result_expected = "4:Test".as_bytes().to_vec();
             assert_eq!(result_expected, from_string(to_bencode));
 
-            let to_bencode = String::from("Interstellar");
+            let to_bencode = "Interstellar".as_bytes().to_vec();
             let result_expected = "12:Interstellar".as_bytes().to_vec();
             assert_eq!(result_expected, from_string(to_bencode));
 
-            let to_bencode = String::from("");
+            let to_bencode = "".as_bytes().to_vec();
             let result_expected = "0:".as_bytes().to_vec();
             assert_eq!(result_expected, from_string(to_bencode));
         }
@@ -137,7 +137,7 @@ mod tests {
         use super::*;
         #[test]
         fn from_list_create_ok() {
-            let str_list = ValuesBencoding::String("Init".to_owned());
+            let str_list = ValuesBencoding::String("Init".as_bytes().to_vec());
             let int_list = ValuesBencoding::Integer(123);
             let list = vec![str_list, int_list];
             let expected_bencoding = "l4:Initi123ee".as_bytes().to_vec();
@@ -146,11 +146,11 @@ mod tests {
         }
         #[test]
         fn from_list_create_with_list_inside_ok() {
-            let str_list = ValuesBencoding::String("Init".to_owned());
+            let str_list = ValuesBencoding::String("Init".as_bytes().to_vec());
             let int_list = ValuesBencoding::Integer(123);
             let list = vec![str_list, int_list];
 
-            let str_list = ValuesBencoding::String("Fin".to_owned());
+            let str_list = ValuesBencoding::String("Fin".as_bytes().to_vec());
             let int_list = ValuesBencoding::Integer(-125);
             let list_inside = vec![int_list, ValuesBencoding::List(list), str_list];
 
@@ -164,10 +164,16 @@ mod tests {
         #[test]
         fn from_dic_create_ok() {
             let mut dic = HashMap::new();
-            dic.insert("A".to_owned(), ValuesBencoding::String("Meta".to_owned()));
-            dic.insert("B".to_owned(), ValuesBencoding::Integer(-125));
-            dic.insert("C".to_owned(), ValuesBencoding::Integer(0));
-            dic.insert("D".to_owned(), ValuesBencoding::String("Fin".to_owned()));
+            dic.insert(
+                "A".as_bytes().to_vec(),
+                ValuesBencoding::String("Meta".as_bytes().to_vec()),
+            );
+            dic.insert("B".as_bytes().to_vec(), ValuesBencoding::Integer(-125));
+            dic.insert("C".as_bytes().to_vec(), ValuesBencoding::Integer(0));
+            dic.insert(
+                "D".as_bytes().to_vec(),
+                ValuesBencoding::String("Fin".as_bytes().to_vec()),
+            );
 
             let bencoding = from_dic(dic.clone());
             let expected_bencoding = "d1:A4:Meta1:Bi-125e1:Ci0e1:D3:Fine".as_bytes().to_vec();
@@ -184,10 +190,13 @@ mod tests {
                 ValuesBencoding::Integer(32),
                 ValuesBencoding::Integer(-12),
                 ValuesBencoding::Integer(0),
-                ValuesBencoding::String("abcd".to_owned()),
+                ValuesBencoding::String("abcd".as_bytes().to_vec()),
             ];
-            dic_to_bencode.insert("announce".to_owned(), ValuesBencoding::List(list));
-            dic_to_bencode.insert("test".to_owned(), ValuesBencoding::String("exe".to_owned()));
+            dic_to_bencode.insert("announce".as_bytes().to_vec(), ValuesBencoding::List(list));
+            dic_to_bencode.insert(
+                "test".as_bytes().to_vec(),
+                ValuesBencoding::String("exe".as_bytes().to_vec()),
+            );
 
             assert_eq!(bencoding, from_dic(dic_to_bencode));
         }
@@ -196,9 +205,12 @@ mod tests {
             let bencoding = "d8:announced4:abcdi32ee4:test3:exee".as_bytes().to_vec();
             let mut dic_to_bencode = HashMap::new();
             let mut dic = HashMap::new();
-            dic.insert("abcd".to_owned(), ValuesBencoding::Integer(32));
-            dic_to_bencode.insert("announce".to_owned(), ValuesBencoding::Dic(dic));
-            dic_to_bencode.insert("test".to_owned(), ValuesBencoding::String("exe".to_owned()));
+            dic.insert("abcd".as_bytes().to_vec(), ValuesBencoding::Integer(32));
+            dic_to_bencode.insert("announce".as_bytes().to_vec(), ValuesBencoding::Dic(dic));
+            dic_to_bencode.insert(
+                "test".as_bytes().to_vec(),
+                ValuesBencoding::String("exe".as_bytes().to_vec()),
+            );
 
             assert_eq!(bencoding, from_dic(dic_to_bencode));
         }
@@ -212,22 +224,28 @@ mod tests {
             let b = String::from("B");
             let c = String::from("C");
             let list = vec![
-                ValuesBencoding::String(a.clone()),
-                ValuesBencoding::String(b.clone()),
-                ValuesBencoding::String(c.clone()),
+                ValuesBencoding::String(a.clone().as_bytes().to_vec()),
+                ValuesBencoding::String(b.clone().as_bytes().to_vec()),
+                ValuesBencoding::String(c.clone().as_bytes().to_vec()),
                 ValuesBencoding::Integer(32),
                 ValuesBencoding::Integer(0),
             ];
 
-            dic_to_bencode.insert("list".to_owned(), ValuesBencoding::List(list));
+            dic_to_bencode.insert("list".as_bytes().to_vec(), ValuesBencoding::List(list));
 
             let mut dic = HashMap::new();
 
-            dic.insert(a.clone(), ValuesBencoding::Integer(-125));
-            dic.insert(b.clone(), ValuesBencoding::Integer(100));
-            dic.insert(c.clone(), ValuesBencoding::String("fin".to_owned()));
+            dic.insert(
+                a.clone().as_bytes().to_vec(),
+                ValuesBencoding::Integer(-125),
+            );
+            dic.insert(b.clone().as_bytes().to_vec(), ValuesBencoding::Integer(100));
+            dic.insert(
+                c.clone().as_bytes().to_vec(),
+                ValuesBencoding::String("fin".as_bytes().to_vec()),
+            );
 
-            dic_to_bencode.insert("dic".to_owned(), ValuesBencoding::Dic(dic));
+            dic_to_bencode.insert("dic".as_bytes().to_vec(), ValuesBencoding::Dic(dic));
 
             let list1 = vec![
                 ValuesBencoding::Integer(1),
@@ -241,18 +259,27 @@ mod tests {
             ];
 
             let mut dic_list = HashMap::new();
-            dic_list.insert(a.clone(), ValuesBencoding::List(list1));
-            dic_list.insert(b.clone(), ValuesBencoding::List(list2));
+            dic_list.insert(a.clone().as_bytes().to_vec(), ValuesBencoding::List(list1));
+            dic_list.insert(b.clone().as_bytes().to_vec(), ValuesBencoding::List(list2));
 
-            dic_to_bencode.insert("dic_list".to_owned(), ValuesBencoding::Dic(dic_list));
+            dic_to_bencode.insert(
+                "dic_list".as_bytes().to_vec(),
+                ValuesBencoding::Dic(dic_list),
+            );
 
             let mut dic_in_list = HashMap::new();
-            dic_in_list.insert(a.clone(), ValuesBencoding::Integer(32));
-            dic_in_list.insert(b.clone(), ValuesBencoding::Integer(-125));
+            dic_in_list.insert(a.clone().as_bytes().to_vec(), ValuesBencoding::Integer(32));
+            dic_in_list.insert(
+                b.clone().as_bytes().to_vec(),
+                ValuesBencoding::Integer(-125),
+            );
 
             let list_dic = vec![ValuesBencoding::Dic(dic_in_list)];
 
-            dic_to_bencode.insert("list_dic".to_owned(), ValuesBencoding::List(list_dic));
+            dic_to_bencode.insert(
+                "list_dic".as_bytes().to_vec(),
+                ValuesBencoding::List(list_dic),
+            );
 
             assert_eq!(bencoding, from_dic(dic_to_bencode));
         }

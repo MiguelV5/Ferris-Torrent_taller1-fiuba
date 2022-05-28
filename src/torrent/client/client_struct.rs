@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::torrent::data::{
     client_data::ClientData, peers_data::PeersDataList, torrent_file_data::TorrentFileData,
     tracker_response_data::TrackerResponseData,

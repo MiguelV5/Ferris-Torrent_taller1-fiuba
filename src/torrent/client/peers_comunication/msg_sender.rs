@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::torrent::client::client_struct::*;
 use crate::torrent::parsers::{
     p2p, p2p::constants::PSTR_STRING_HANDSHAKE, p2p::message::P2PMessage,

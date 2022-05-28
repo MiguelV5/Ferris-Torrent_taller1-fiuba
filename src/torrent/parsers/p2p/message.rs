@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{error::Error, fmt};
 
 #[derive(PartialEq, Debug, Clone)]
@@ -49,11 +50,11 @@ pub enum P2PMessage {
 #[derive(PartialEq, Debug)]
 /// Representa un tipo de error en la DECODIFICACION de mensajes P2P
 pub enum P2PMessageDecodingError {
-    ByteAmountError(String),
-    FromUsizeToU32Error(String),
-    FromBytesToStringError(String),
-    InvalidIdError(String),
-    InvalidProtocolStrError(String),
+    ByteAmount(String),
+    FromUsizeToU32(String),
+    FromBytesToString(String),
+    InvalidId(String),
+    InvalidProtocolStr(String),
 }
 
 impl fmt::Display for P2PMessageDecodingError {

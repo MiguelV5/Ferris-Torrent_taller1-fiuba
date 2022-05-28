@@ -1,4 +1,5 @@
-//use fa_torrent::torrent;
+mod torrent;
+
 fn main() {
     println!("Hello, world!");
 }
