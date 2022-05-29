@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use crate::torrent::parsers::bencoding;
-use crate::torrent::parsers::bencoding::values::ValuesBencoding;
+use crate::torrent::parsers::bencoding::values::{ErrorBencoding, ValuesBencoding};
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::Read;
@@ -16,7 +16,7 @@ pub enum MetadataError {
     FileNotFound,
     IsNotTorrent,
     Reading,
-    TransferToDic,
+    TransferToDic(ErrorBencoding),
 }
 
 /// Se encarga de leer la información del .torrent
@@ -45,7 +45,7 @@ pub fn read_torrent_file_to_dic(filename: &str) -> ResultMetadata<DicValues> {
     let metadata = read_torrent_file(filename)?;
     match bencoding::decoder::from_torrent_to_dic(metadata) {
         Ok(dic) => Ok(dic),
-        _ => Err(MetadataError::TransferToDic),
+        Err(error) => Err(MetadataError::TransferToDic(error)),
     }
 }
 
@@ -59,7 +59,7 @@ mod tests {
     use super::*;
     use crate::torrent::parsers::bencoding;
     #[test]
-    fn read_some_torrent_ok() {
+    fn read_torrent1_ok() {
         let file_dir = "torrents_for_test/ubuntu-22.04-desktop-amd64.iso.torrent";
         match read_torrent_file(file_dir) {
             Ok(torrent_metadata) => {
@@ -68,10 +68,42 @@ mod tests {
                         let to_bencoding = bencoding::encoder::from_dic(dic_torrent);
                         assert_eq!(torrent_metadata, to_bencoding);
                     }
-                    Err(e) => panic!("{:?}", e),
+                    Err(error) => panic!("ErrorBencoding: {:?}", error),
                 }
             }
-            Err(e) => panic!("{:?}", e),
+            Err(error) => panic!("MetadataError: {:?}", error),
+        }
+    }
+    #[test]
+    fn read_torrent2_ok() {
+        let file_dir = "torrents_for_test/big-buck-bunny.torrent";
+        match read_torrent_file(file_dir) {
+            Ok(torrent_metadata) => {
+                match bencoding::decoder::from_torrent_to_dic(torrent_metadata.clone()) {
+                    Ok(dic_torrent) => {
+                        let to_bencoding = bencoding::encoder::from_dic(dic_torrent);
+                        assert_eq!(torrent_metadata, to_bencoding);
+                    }
+                    Err(error) => panic!("ErrorBencoding: {:?}", error),
+                }
+            }
+            Err(error) => panic!("MetadataError: {:?}", error),
+        }
+    }
+    #[test]
+    fn read_torrent3_ok() {
+        let file_dir = "torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
+        match read_torrent_file(file_dir) {
+            Ok(torrent_metadata) => {
+                match bencoding::decoder::from_torrent_to_dic(torrent_metadata.clone()) {
+                    Ok(dic_torrent) => {
+                        let to_bencoding = bencoding::encoder::from_dic(dic_torrent);
+                        assert_eq!(torrent_metadata, to_bencoding);
+                    }
+                    Err(error) => panic!("ErrorBencoding: {:?}", error),
+                }
+            }
+            Err(error) => panic!("MetadataError: {:?}", error),
         }
     }
     #[test]

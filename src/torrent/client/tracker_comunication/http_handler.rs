@@ -47,8 +47,8 @@ pub enum ErrorMsgHttp {
     ConnectTcp,
     ConnectTls,
     NoConection,
+    NoMorePorts,
     HttpDescription(String),
-    HttpCode(u32),
     SendingGetMessage,
     ReadingResponse,
 }
@@ -57,16 +57,16 @@ struct MsgDescriptor {
     info_hash: String,
     peer_id: String,
     ip: String,
-    port: String,
-    uploaded: String,
-    downloaded: String,
-    left: String,
+    port: u32,
+    uploaded: u64,
+    downloaded: u64,
+    left: u64,
     event: String,
     host: String,
 }
 
 fn vec_u8_to_string(vec: &[u8]) -> String {
-    String::from_utf8_lossy(vec).to_string()
+    String::from_utf8_lossy(vec).into_owned()
 }
 
 fn find_index_msg(response: &[u8], size: usize, end_line: &[u8]) -> Option<usize> {
@@ -103,15 +103,16 @@ fn init_host(tracker: String) -> ResultMsg<String> {
 
 impl MsgDescriptor {
     pub fn new(torrent: TorrentFileData) -> ResultMsg<Self> {
-        let info_hash = torrent.info_hash;
-        let peer_id = String::from("ABCDEFGHIJKLMNOPQRST"); //Crear generador de Peer_ID
+        let info_hash = vec_u8_to_string(&torrent.get_info_hash());
+        //Cuando este el generador de Peer_Id se lo podria pasar por parametro e ingresarlo aca
+        let peer_id = String::from("ABCDEFGHIJKLMNOPQRST");
         let ip = String::from("127.0.0.1");
-        let port = String::from("6881"); //Puertos que se utilizan (6881-6889)
-        let uploaded = String::from("0");
-        let downloaded = String::from("0");
-        let left = torrent.total_size.to_string();
+        let port = 6881;
+        let uploaded = 0;
+        let downloaded = 0;
+        let left = torrent.get_total_size() as u64;
         let event = String::from("started");
-        let host = init_host(torrent.tracker_main)?;
+        let host = init_host(torrent.url_tracker_main)?;
 
         Ok(MsgDescriptor {
             info_hash,
@@ -125,32 +126,60 @@ impl MsgDescriptor {
             host,
         })
     }
+
     pub fn get_info_hash(&self) -> String {
         self.info_hash.clone()
     }
+
     pub fn get_peer_id(&self) -> String {
         self.peer_id.clone()
     }
+
     pub fn get_ip(&self) -> String {
         self.ip.clone()
     }
+
     pub fn get_port(&self) -> String {
-        self.port.clone()
+        self.port.to_string()
     }
+
     pub fn get_uploaded(&self) -> String {
-        self.uploaded.clone()
+        self.uploaded.to_string()
     }
+
     pub fn get_downloaded(&self) -> String {
-        self.downloaded.clone()
+        self.downloaded.to_string()
     }
+
     pub fn get_left(&self) -> String {
-        self.left.clone()
+        self.left.to_string()
     }
+
     pub fn get_event(&self) -> String {
         self.event.clone()
     }
+
     pub fn get_host(&self) -> String {
         self.host.clone()
+    }
+    //Ver si es mejor que cambie los puertos por dentro cuando busca conectarse
+    //O sea que cuando pida la respuesta del tracker pruebe todos los puertos y si los agota
+    //ahi devuelva el error o si es mejor que se cambie manualmente si la respuesta del tracker da error
+    pub fn change_port(&mut self) -> Result<(), ErrorMsgHttp> {
+        //Puertos que se utilizan (6881-6889)
+        if self.port == 6889 {
+            self.port = 6881;
+            Err(ErrorMsgHttp::NoMorePorts)
+        } else {
+            self.port += 1;
+            Ok(())
+        }
+    }
+
+    pub fn update_download_stats(&mut self, more_down: u64, more_up: u64) {
+        self.downloaded += more_down;
+        self.uploaded += more_up;
+        self.left -= more_down;
     }
 }
 
@@ -190,6 +219,10 @@ impl HttpHandler {
         Ok(result)
     }
 
+    pub fn update_download_stats(&mut self, more_down: u64, more_up: u64) {
+        self.msg_get.update_download_stats(more_down, more_up)
+    }
+
     pub fn connect(&self) -> ResultMsg<TlsStream<TcpStream>> {
         let connector = match TlsConnector::new() {
             Ok(conected) => conected,
@@ -219,27 +252,28 @@ impl HttpHandler {
             Some("HTTP/1.1") => (),
             _ => return Err(ErrorMsgHttp::FormatResponseError),
         }
-        match iter_string.next() {
-            Some("200") => (),
-            Some(code) => match code.parse::<u32>() {
-                Ok(number_code) => return Err(ErrorMsgHttp::HttpCode(number_code)),
-                _ => return Err(ErrorMsgHttp::FormatResponseError),
-            },
+        let str_code = match iter_string.next() {
+            Some(code) => code.to_owned(),
             _ => return Err(ErrorMsgHttp::FormatResponseError),
-        }
+        };
+
         match iter_string.next() {
-            Some("OK") => (),
             Some(msg_error) => {
-                let mut message = msg_error.to_owned();
+                let mut message = str_code.clone();
+                message.push_str(": ");
+                message.push_str(msg_error);
                 for more_msg in iter_string {
                     message.push(' ');
                     message.push_str(more_msg);
                 }
-                return Err(ErrorMsgHttp::HttpDescription(message));
+                match str_code.parse::<u32>() {
+                    Ok(200..=299) => Ok(()),
+                    Ok(_) => Err(ErrorMsgHttp::HttpDescription(message)),
+                    Err(_) => Err(ErrorMsgHttp::FormatResponseError),
+                }
             }
-            _ => return Err(ErrorMsgHttp::FormatResponseError),
+            _ => Err(ErrorMsgHttp::FormatResponseError),
         }
-        Ok(())
     }
 
     fn tracker_response_to_dic(&self, response: Vec<u8>) -> ResultMsg<DicValues> {
@@ -283,6 +317,7 @@ impl HttpHandler {
 mod test {
     use super::*;
     use crate::torrent::data::medatada_analyzer::read_torrent_file_to_dic;
+
     #[test]
     fn test_creation_file1_ok() {
         //ubuntu-22.04-desktop-amd64.iso
@@ -292,27 +327,56 @@ mod test {
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("{:?}", error),
+            Err(error) => panic!("MetadataError: {:?}", error),
         };
 
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("{:?}", error),
+            Err(error) => panic!("ErrorTorrent: {:?}", error),
         };
 
         let http_handler = match HttpHandler::new(torrent.clone()) {
             Ok(handler) => handler,
-            Err(error) => panic!("{:?}", error),
+            Err(error) => panic!("ErrorMsgHttp: {:?}", error),
         };
+        let info_hash = vec_u8_to_string(&torrent.get_info_hash());
 
         let mut msg_get_expected = String::from("GET /announce");
         msg_get_expected.push_str("?info_hash=");
-        msg_get_expected.push_str(&torrent.get_info_hash());
+        msg_get_expected.push_str(&info_hash);
         msg_get_expected.push_str("&peer_id=ABCDEFGHIJKLMNOPQRST&ip=127.0.0.1&port=6881");
         msg_get_expected.push_str("&uploaded=0&downloaded=0&left=");
         msg_get_expected.push_str(&torrent.get_total_size().to_string());
         msg_get_expected.push_str("&event=started HTTP/1.0\r\nHost:torrent.ubuntu.com\r\n\r\n");
 
         assert_eq!(http_handler.get_send_msg(), Ok(msg_get_expected))
+    }
+    #[test]
+    fn test_check_http_code() {
+        let dir = "torrents_for_test/ubuntu-22.04-desktop-amd64.iso.torrent";
+
+        let dic_torrent = match read_torrent_file_to_dic(dir) {
+            Ok(dic_torrent) => dic_torrent,
+            Err(error) => panic!("MetadataError: {:?}", error),
+        };
+
+        let torrent = match TorrentFileData::new(dic_torrent) {
+            Ok(struct_torrent) => struct_torrent,
+            Err(error) => panic!("ErrorTorrent: {:?}", error),
+        };
+
+        let http_handler = match HttpHandler::new(torrent.clone()) {
+            Ok(handler) => handler,
+            Err(error) => panic!("ErrorMsgHttp: {:?}", error),
+        };
+
+        let response = http_handler.check_http_code("HTTP/1.1 200 OK".as_bytes());
+        assert_eq!(response, Ok(()));
+
+        let response = http_handler.check_http_code("HTTP/1.1 400 NOT FOUND".as_bytes());
+        assert_eq!(
+            response,
+            Err(ErrorMsgHttp::HttpDescription("400: NOT FOUND".to_owned()))
+        )
     }
 }

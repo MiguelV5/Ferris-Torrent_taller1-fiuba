@@ -32,13 +32,12 @@ pub enum ErrorTorrent {
 // *Cambio de tracker_main por si el primero no funciona
 // *Ver como manejarse con el name y path dependiendo de si es single file o multiple file
 // *Con multiple file ver como guardar el path de cada archivo o como devolverlo en una funcion quizas
-// *Ver si quizas guardar el peer_id aca
 #[derive(PartialEq, Debug, Clone)]
 pub struct TorrentFileData {
-    pub tracker_main: String,
-    pub tracker_list: Vec<ValuesBencoding>,
+    pub url_tracker_main: String,
+    pub url_tracker_list: Vec<ValuesBencoding>,
     pub info: DicValues,
-    pub info_hash: String,
+    pub info_hash: Vec<u8>,
     pub piece_lenght: i64,
     pub total_amount_pieces: usize,
     pub total_size: i64,
@@ -64,7 +63,7 @@ fn init_info(dic_torrent: &DicValues) -> Result<DicValues, ErrorTorrent> {
     }
 }
 
-fn init_info_hash(dic_info: &DicValues) -> Result<String, ErrorTorrent> {
+fn init_info_hash(dic_info: &DicValues) -> Result<Vec<u8>, ErrorTorrent> {
     //Paso info a bencoding
     let vec_info = bencoding::encoder::from_dic(dic_info.clone());
     //Le aplico SHA-1 a el info bencodeado
@@ -121,10 +120,10 @@ fn init_total_size(dic_info: &DicValues) -> Result<i64, ErrorTorrent> {
 impl TorrentFileData {
     pub fn new(dic_torrent: DicValues) -> Result<Self, ErrorTorrent> {
         let mut torrent = TorrentFileData {
-            tracker_main: init_tracker_main(&dic_torrent)?,
-            tracker_list: init_tracker_list(&dic_torrent)?,
+            url_tracker_main: init_tracker_main(&dic_torrent)?,
+            url_tracker_list: init_tracker_list(&dic_torrent)?,
             info: init_info(&dic_torrent)?,
-            info_hash: String::new(),
+            info_hash: vec![],
             total_size: 0,
             piece_lenght: 0,
             total_amount_pieces: 0,
@@ -143,10 +142,10 @@ impl TorrentFileData {
     }
 
     pub fn get_tracker_main(&self) -> String {
-        self.tracker_main.clone()
+        self.url_tracker_main.clone()
     }
 
-    pub fn get_info_hash(&self) -> String {
+    pub fn get_info_hash(&self) -> Vec<u8> {
         self.info_hash.clone()
     }
 
