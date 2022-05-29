@@ -1,14 +1,16 @@
 #![allow(dead_code)]
-use crate::torrent::data::peers_data::{PeerData, PeersDataList};
-use crate::torrent::data::tracker_response_data::TrackerResponsePeerData;
+use crate::torrent::data::peer_data_for_communication::PeerDataForP2PCommunication;
+use crate::torrent::data::tracker_response_data::PeerDataFromTrackerResponse;
 use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
 use crate::torrent::parsers::p2p::message::PieceStatus;
 use crate::torrent::{client::client_struct::*, parsers::p2p::message::P2PMessage};
+use core::fmt;
+use std::error::Error;
 use std::net::TcpStream;
 use std::vec;
 
 use super::msg_receiver::receive_message;
-use super::msg_sender::send_interested;
+use super::msg_sender::{send_interested, send_request};
 use super::{msg_receiver::receive_handshake, msg_sender::send_handshake};
 
 // otra manera de hacer un socket address:
@@ -20,21 +22,48 @@ pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
 pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
 pub const DEFAULT_INFO_HASH: [u8; 20] = [0; 20];
 
+/*
+ * Falta:
+ * - Ver los test que tienen accesos a estructura y devuelven Ok
+ */
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum MsgLogicControlError {
+    SendingHandshake(String),
+    ConectingWithPeer(String),
+    CheckingAndSavingHandshake(String),
+    UpdatingBitfield(String),
+    LookingForPieces(String),
+    ReceivingHanshake(String),
+    ReceivingMessage(String),
+    SendingMessage(String),
+    UpdatingPieceStatus(String),
+    Testing(String), //no me parece del todo bueno pero no encontre otra forma para levantar errores en test.
+}
+
+impl fmt::Display for MsgLogicControlError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Error for MsgLogicControlError {}
+
 //CONNECTION
 fn start_connection_with_a_peers(
-    peer_list: &[TrackerResponsePeerData],
+    peer_list: &[PeerDataFromTrackerResponse],
     server_peer_index: usize,
-) -> Result<TcpStream, ClientError> {
+) -> Result<TcpStream, MsgLogicControlError> {
     let peer_data = match peer_list.get(server_peer_index) {
         Some(peer_data) => peer_data,
         None => {
-            return Err(ClientError::ConectingWithPeer(String::from(
-                "No se encontró ningun peer en el indice dado",
+            return Err(MsgLogicControlError::ConectingWithPeer(String::from(
+                "[MsgLogicControlError] Couldn`t find a server peer on the given index.",
             )))
         }
     };
     let stream = TcpStream::connect(&peer_data.peer_address)
-        .map_err(|error| ClientError::ConectingWithPeer(format!("{:?}", error)))?;
+        .map_err(|error| MsgLogicControlError::ConectingWithPeer(format!("{:?}", error)))?;
     Ok(stream)
 }
 
@@ -62,37 +91,34 @@ fn check_handshake(
     server_info_hash: Vec<u8>,
     server_peer_id: &str,
     server_peer_index: usize,
-) -> Result<(), ClientError> {
+) -> Result<(), MsgLogicControlError> {
     if (server_protocol_str != PSTR_STRING_HANDSHAKE)
-        || (server_info_hash != client_peer.client_data.info_hash)
+        || (server_info_hash != client_peer.info_hash)
         || !has_expected_peer_id(client_peer, server_peer_id, server_peer_index)
     {
-        return Err(ClientError::CheckingAndSavingHandshake(
-            "El handshake recibido no posee los campos esperados.".to_string(),
+        return Err(MsgLogicControlError::CheckingAndSavingHandshake(
+            "[MsgLogicControlError] The received handshake hasn`t got the expected fields."
+                .to_string(),
         ));
     }
     Ok(())
 }
 
 fn save_handshake_data(client_peer: &mut Client, server_peer_id: String) {
-    let new_peer = PeerData {
+    let new_peer = PeerDataForP2PCommunication {
         pieces_availability: None,
         peer_id: server_peer_id,
         am_interested: false,
-        am_chocking: true,
+        am_choking: true,
         peer_choking: true,
     };
 
-    match &mut client_peer.peers_data_list {
-        Some(peers_data_list) => {
-            peers_data_list.data_list.push(new_peer);
-            peers_data_list.total_amount_of_peers += 1;
+    match &mut client_peer.list_of_peers_data_for_communication {
+        Some(list_of_peers_data_for_communication) => {
+            list_of_peers_data_for_communication.push(new_peer);
         }
         None => {
-            client_peer.peers_data_list = Some(PeersDataList {
-                data_list: vec![new_peer],
-                total_amount_of_peers: 1,
-            });
+            client_peer.list_of_peers_data_for_communication = Some(vec![new_peer]);
         }
     };
 }
@@ -101,7 +127,7 @@ fn check_and_save_handshake_data(
     client_peer: &mut Client,
     message: P2PMessage,
     server_peer_index: usize,
-) -> Result<(), ClientError> {
+) -> Result<(), MsgLogicControlError> {
     if let P2PMessage::Handshake {
         protocol_str: server_protocol_str,
         info_hash: server_info_hash,
@@ -118,8 +144,8 @@ fn check_and_save_handshake_data(
         save_handshake_data(client_peer, server_peer_id);
         Ok(())
     } else {
-        Err(ClientError::CheckingAndSavingHandshake(
-            "El mensaje p2p recibido no es un handshake".to_string(),
+        Err(MsgLogicControlError::CheckingAndSavingHandshake(
+            "[MsgLogicControlError] The received messagge is not a handshake.".to_string(),
         ))
     }
 }
@@ -132,16 +158,19 @@ fn is_any_spare_bit_set(client_peer: &Client, bitfield: &[PieceStatus]) -> bool 
         .any(|piece_status| *piece_status == PieceStatus::ValidAndAvailablePiece);
 }
 
-fn check_bitfield(client_peer: &Client, bitfield: &mut [PieceStatus]) -> Result<(), ClientError> {
+fn check_bitfield(
+    client_peer: &Client,
+    bitfield: &mut [PieceStatus],
+) -> Result<(), MsgLogicControlError> {
     if bitfield.len() < client_peer.torrent_file.total_amount_pieces {
-        return Err(ClientError::UpdatingBitfield(
-            "La longitud del bitfield es incorrecta.".to_string(),
+        return Err(MsgLogicControlError::UpdatingBitfield(
+            "[MsgLogicControlError] The bitfield length is incorrect.".to_string(),
         ));
     }
 
     if is_any_spare_bit_set(client_peer, bitfield) {
-        return Err(ClientError::UpdatingBitfield(
-            "Alguno de los bits de repuesto esta seteado en uno.".to_string(),
+        return Err(MsgLogicControlError::UpdatingBitfield(
+            "[MsgLogicControlError] Some of the spare bits are set.".to_string(),
         ));
     }
     Ok(())
@@ -150,25 +179,25 @@ fn check_bitfield(client_peer: &Client, bitfield: &mut [PieceStatus]) -> Result<
 fn check_and_truncate_bitfield_according_to_total_amount_of_pieces(
     client_peer: &Client,
     bitfield: &mut Vec<PieceStatus>,
-) -> Result<(), ClientError> {
+) -> Result<(), MsgLogicControlError> {
     check_bitfield(client_peer, bitfield)?;
     bitfield.truncate(client_peer.torrent_file.total_amount_pieces);
     Ok(())
 }
 
 fn update_peers_data_list(
-    peers_data_list: &mut PeersDataList,
+    list_of_peers_data_for_communication: &mut [PeerDataForP2PCommunication],
     bitfield: Vec<PieceStatus>,
     server_peer_index: usize,
-) -> Result<(), ClientError> {
-    let peer_data = peers_data_list.data_list.get_mut(server_peer_index);
+) -> Result<(), MsgLogicControlError> {
+    let peer_data = list_of_peers_data_for_communication.get_mut(server_peer_index);
     match peer_data {
         Some(peer_data) => {
             peer_data.pieces_availability = Some(bitfield);
             Ok(())
         }
-        None => Err(ClientError::UpdatingBitfield(
-            "No se encontró ningun peer en el indice dado".to_string(),
+        None => Err(MsgLogicControlError::UpdatingBitfield(
+            "[MsgLogicControlError] Couldn`t find a server peer on the given index".to_string(),
         )),
     }
 }
@@ -177,14 +206,16 @@ fn update_peer_bitfield(
     client_peer: &mut Client,
     mut bitfield: Vec<PieceStatus>,
     server_peer_index: usize,
-) -> Result<(), ClientError> {
+) -> Result<(), MsgLogicControlError> {
     check_and_truncate_bitfield_according_to_total_amount_of_pieces(client_peer, &mut bitfield)?;
-    match &mut client_peer.peers_data_list {
-        Some(peers_data_list) => {
-            update_peers_data_list(peers_data_list, bitfield, server_peer_index)
-        }
-        None => Err(ClientError::UpdatingBitfield(
-            "Acceso invalido a la lista de peers".to_string(),
+    match &mut client_peer.list_of_peers_data_for_communication {
+        Some(list_of_peers_data_for_communication) => update_peers_data_list(
+            list_of_peers_data_for_communication,
+            bitfield,
+            server_peer_index,
+        ),
+        None => Err(MsgLogicControlError::UpdatingBitfield(
+            "[MsgLogicControlError] Server peers list invalid access".to_string(),
         )),
     }
 }
@@ -195,8 +226,11 @@ fn server_peer_has_a_valid_and_available_piece_on_position(
     server_peer_index: usize,
     position: usize,
 ) -> bool {
-    if let Some(peers_data_list) = &client_peer.peers_data_list {
-        if let Some(server_peer_data) = peers_data_list.data_list.get(server_peer_index) {
+    if let Some(list_of_peers_data_for_communication) =
+        &client_peer.list_of_peers_data_for_communication
+    {
+        if let Some(server_peer_data) = list_of_peers_data_for_communication.get(server_peer_index)
+        {
             if let Some(pieces_availability) = &server_peer_data.pieces_availability {
                 return pieces_availability[position] == PieceStatus::ValidAndAvailablePiece;
             }
@@ -208,7 +242,7 @@ fn server_peer_has_a_valid_and_available_piece_on_position(
 
 fn look_for_a_missing_piece_index(client_peer: &Client, server_peer_index: usize) -> Option<usize> {
     for (piece_index, _piece_status) in client_peer
-        .client_data
+        .data_of_download
         .pieces_availability
         .iter()
         .filter(|piece_status| **piece_status == PieceStatus::MissingPiece)
@@ -226,74 +260,116 @@ fn look_for_a_missing_piece_index(client_peer: &Client, server_peer_index: usize
     None
 }
 
+fn look_for_beggining_byte_index(client_peer: &Client, piece_index: u32) -> Option<u32> {
+    if let Some(PieceStatus::PartiallyDownloaded { downloaded_bytes }) = client_peer
+        .data_of_download
+        .pieces_availability
+        .get(piece_index as usize)
+    {
+        return Some(*downloaded_bytes);
+    }
+    None
+}
+
 // UPDATING FIELDS
 fn update_am_interested_field(client_peer: &mut Client, server_peer_index: usize, new_value: bool) {
-    if let Some(peers_data_list) = &mut client_peer.peers_data_list {
-        if let Some(server_peer_data) = peers_data_list.data_list.get_mut(server_peer_index) {
+    if let Some(list_of_peers_data_for_communication) =
+        &mut client_peer.list_of_peers_data_for_communication
+    {
+        if let Some(server_peer_data) =
+            list_of_peers_data_for_communication.get_mut(server_peer_index)
+        {
             server_peer_data.am_interested = new_value;
         }
     }
 }
 
-fn update_am_choking_field(client_peer: &mut Client, server_peer_index: usize, new_value: bool) {
-    if let Some(peers_data_list) = &mut client_peer.peers_data_list {
-        if let Some(server_peer_data) = peers_data_list.data_list.get_mut(server_peer_index) {
-            server_peer_data.am_chocking = new_value;
-        }
-    }
-}
-
 fn update_peer_choking_field(client_peer: &mut Client, server_peer_index: usize, new_value: bool) {
-    if let Some(peers_data_list) = &mut client_peer.peers_data_list {
-        if let Some(server_peer_data) = peers_data_list.data_list.get_mut(server_peer_index) {
+    if let Some(list_of_peers_data_for_communication) =
+        &mut client_peer.list_of_peers_data_for_communication
+    {
+        if let Some(server_peer_data) =
+            list_of_peers_data_for_communication.get_mut(server_peer_index)
+        {
             server_peer_data.peer_choking = new_value;
         }
     }
 }
 
+fn update_am_choking_field(client_peer: &mut Client, server_peer_index: usize, new_value: bool) {
+    if let Some(list_of_peers_data_for_communication) =
+        &mut client_peer.list_of_peers_data_for_communication
+    {
+        if let Some(server_peer_data) =
+            list_of_peers_data_for_communication.get_mut(server_peer_index)
+        {
+            server_peer_data.am_choking = new_value;
+        }
+    }
+}
+
 // ASK FOR INFORMATION
-fn am_choking(client_peer: &Client, server_peer_index: usize) -> bool {
-    if let Some(peers_data_list) = &client_peer.peers_data_list {
-        if let Some(server_peer_data) = peers_data_list.data_list.get(server_peer_index) {
-            return server_peer_data.am_chocking;
+fn peer_choking(client_peer: &Client, server_peer_index: usize) -> bool {
+    if let Some(list_of_peers_data_for_communication) =
+        &client_peer.list_of_peers_data_for_communication
+    {
+        if let Some(server_peer_data) = list_of_peers_data_for_communication.get(server_peer_index)
+        {
+            return server_peer_data.peer_choking;
         }
     }
     true
 }
 
-// Notas
-// Miguel y Luciano: En el google docs se tiene que antes de establecer conexion con peers se debe ver como viene la
-//  lista de peers segun clave compact de la respuesta del tracker.
-//  Esto en realidad es, justamente, responsabilidad de lo que se encargue de recibir la info del tracker.
-//
-// Miguel: Estuve releyendo el proceso y esta funcion en realidad seria algo como la entrada principal a toda la logica de conexion.
-//  O sea, necesitamos una funcion (esta misma) que deberia establecer y manejar la conexion con todos los peers (o con los necesarios)
-//  y luego hacer algo asi como llamar a una funcion que se encargue de hacer todo el protocolo de leecher con distintos peers en threads.
-//
-// Miguel: Nota aparte nada que ver (de pensamiento en threads). Se me ocurrió por ejemplo, en los threads individuales que van corriendo esta funcion por cada peer, usar channels para comunicarle al thread padre que ya llegó al punto en el que tiene el bitfield de cada peer, de tal forma que dicho thread padre se encargue de analizar los datos de todos los bitfields y de ahi poder responderle a los threads hijos con exactamente cuales bloques se le deben Requestear a cada peer.
+fn am_interested(client_peer: &Client, server_peer_index: usize) -> bool {
+    if let Some(list_of_peers_data_for_communication) =
+        &client_peer.list_of_peers_data_for_communication
+    {
+        if let Some(server_peer_data) = list_of_peers_data_for_communication.get(server_peer_index)
+        {
+            return server_peer_data.am_interested;
+        }
+    }
+    false
+}
 
-//FUNCION PRINCIPAL
-pub fn handle_client_communication(
+// HAVE
+fn update_server_peer_piece_status(
     client_peer: &mut Client,
     server_peer_index: usize,
-) -> Result<(), ClientError> {
-    // (MIGUEL) VER NOTA DE client_struct.rs; parte de Error
+    piece_index: u32,
+    new_status: PieceStatus,
+) -> Result<(), MsgLogicControlError> {
+    if let Some(list_of_peers_data_for_communication) =
+        &mut client_peer.list_of_peers_data_for_communication
+    {
+        if let Some(peer_data) = list_of_peers_data_for_communication.get_mut(server_peer_index) {
+            if let Some(pieces_availability) = &mut peer_data.pieces_availability {
+                if let Some(piece_status) =
+                    pieces_availability.get_mut(usize::try_from(piece_index).map_err(|err| {
+                        MsgLogicControlError::UpdatingPieceStatus(format!("{:?}", err))
+                    })?)
+                {
+                    *piece_status = new_status;
+                    return Ok(());
+                }
+                return Err(MsgLogicControlError::UpdatingPieceStatus(
+                    "[MsgLogicControlError] Invalid piece index.".to_string(),
+                ));
+            }
+        }
+    }
 
-    //Luciano: NUEVA IDEA se me ocurre tener dos estructuras: MsgSender y MsgReceiver al que le pasas una unica vez el cliente y el stream y listo, despeus solo haces msg_sender.send_handshake() o msg_receiver.receive_msg()
+    Err(MsgLogicControlError::UpdatingPieceStatus(
+        "[MsgLogicControlError] Client peer invalid access.".to_string(),
+    ))
+}
 
-    //CONEXION CON UN PEER
-    let mut client_stream =
-        start_connection_with_a_peers(&client_peer.tracker_response.peers, server_peer_index)?;
-
-    //ENVIO HANDSHAKE
-    send_handshake(client_peer, &mut client_stream)?;
-
-    //RECIBO HANDSHAKE
-    let received_handshake = receive_handshake(&mut client_stream)?;
-    check_and_save_handshake_data(client_peer, received_handshake, server_peer_index)?;
-
-    //RECIBO UN MENSAJE
-    let received_msg = receive_message(&mut client_stream)?;
+fn react_according_to_the_received_msg(
+    client_peer: &mut Client,
+    server_peer_index: usize,
+    received_msg: P2PMessage,
+) -> Result<(), MsgLogicControlError> {
     match received_msg {
         P2PMessage::KeepAlive => {
             // deberia extender el tiempo antes de cortar la conexion
@@ -301,12 +377,12 @@ pub fn handle_client_communication(
         }
         P2PMessage::Choke => {
             //capaz esto podria devolver un Result<>
-            update_am_choking_field(client_peer, server_peer_index, true);
+            update_peer_choking_field(client_peer, server_peer_index, true);
             Ok(())
         }
         P2PMessage::Unchoke => {
             //capaz esto podria devolver un Result<>
-            update_am_choking_field(client_peer, server_peer_index, false);
+            update_peer_choking_field(client_peer, server_peer_index, false);
             Ok(())
         }
         P2PMessage::Interested => {
@@ -317,10 +393,12 @@ pub fn handle_client_communication(
             //no hago nada porque estoy del lado del cliente.
             Ok(())
         }
-        P2PMessage::Have { piece_index: _ } => {
-            //
-            Ok(())
-        }
+        P2PMessage::Have { piece_index } => update_server_peer_piece_status(
+            client_peer,
+            server_peer_index,
+            piece_index,
+            PieceStatus::ValidAndAvailablePiece,
+        ),
         P2PMessage::Bitfield { bitfield } => {
             update_peer_bitfield(client_peer, bitfield, server_peer_index)
         }
@@ -337,7 +415,10 @@ pub fn handle_client_communication(
             beginning_byte_index: _,
             block: _,
         } => {
-            //aca si hago porque es el bloque recibido
+            //save_block()
+            // Miguel: [NOTA PARA DESPUES CUANDO SE NECESITE USAR THREADS] Lo que se me ocurre acá para cuando se vaya a guardar el archivo COMPLETO es que hagas una funcion en un archivo nuevo en el directorio data que sea tipo piece_collector.rs ponele; que lo que hace es ir recibiendo las piezas (completas) por un channel (o tambien se podria directamente retornar la pieza completa desde la funcion principal de este archivo en vez de  un Ok(()), y que en la funcion del handle.rs q se vayan acumulando piezas para despues llamar al collector y que vaya escribiendo el archivo). Tambien para despues, habrá que ver como adaptar la funcion principal de este archivo para que NO reciba un &mut al client, sino capaz un Arc<Mutex<Client>>
+            //
+            // Miguel: [NOTA PARA AHORA (ENTREGA PARCIAL)] Como solo nos piden tener una pieza, creo que lo que se busca es que se escriba esa sola piezita en un archivo para despues poder aplicarle el comando sumsha1 de linux y comparar con el valor sha1 del info_hash que viene del tracker. Entonces podrias ver de retornar la pieza en la funcion principal de ESTE archivo para asi poder pasarsela al collector para que por ahora escriba esa sola pieza como un archivito "completo" y listo.
             Ok(())
         }
         P2PMessage::Cancel {
@@ -345,7 +426,7 @@ pub fn handle_client_communication(
             beginning_byte_index: _,
             amount_of_bytes: _,
         } => {
-            //
+            //no hago nada
             Ok(())
         }
         P2PMessage::Port { listen_port: _ } => {
@@ -354,11 +435,20 @@ pub fn handle_client_communication(
         }
         _ => Ok(()),
     }?;
+    Ok(())
+}
 
-    let _piece_index = match look_for_a_missing_piece_index(client_peer, server_peer_index) {
+fn look_for_pieces(
+    client_peer: &mut Client,
+    server_peer_index: usize,
+    client_stream: &mut TcpStream,
+) -> Result<(), MsgLogicControlError> {
+    let piece_index = match look_for_a_missing_piece_index(client_peer, server_peer_index) {
         Some(piece_index) => {
             update_am_interested_field(client_peer, server_peer_index, true);
             piece_index
+                .try_into()
+                .map_err(|error| MsgLogicControlError::LookingForPieces(format!("{:?}", error)))?
         }
         None => {
             update_am_interested_field(client_peer, server_peer_index, false);
@@ -366,565 +456,602 @@ pub fn handle_client_communication(
         }
     };
 
-    if !am_choking(client_peer, server_peer_index) {
-        send_interested(client_peer, &mut client_stream)?;
+    //se podria modularizar eso
+
+    //SI ESTOY CHOKE -> LE MANDO QUE ESTOY INTERESADO EN UNA PIEZA
+    //SI NO ESTOY CHOKE -> LE MANDO UN REQUEST PARA UNA DE SUS PIEZAS
+    if peer_choking(client_peer, server_peer_index) {
+        send_interested(client_stream)
+            .map_err(|err| MsgLogicControlError::SendingMessage(format!("{:?}", err)))?;
     } else {
-        //send_request()
+        let beginning_byte_index =
+            look_for_beggining_byte_index(&*client_peer, piece_index).unwrap_or(0);
+        //cambio por clippy
+        // let beginning_byte_index = match look_for_beggining_byte_index(&*client_peer, piece_index) {
+        //     Some(beginning_byte_index) => beginning_byte_index,
+        //     None => 0, //devolver error
+        // };
+        let amount_of_bytes = 4; //habria que ver de que manera calcular esto segun los bytes que faltan y bla
+        send_request(
+            client_stream,
+            piece_index,
+            beginning_byte_index,
+            amount_of_bytes,
+        )
+        .map_err(|err| MsgLogicControlError::SendingMessage(format!("{:?}", err)))?;
     }
-    //Si me tiene choke -> le mando el interested
-    //Si no me tiene choke -> le mando request
+
     Ok(())
 }
 
-// #[cfg(test)]
-// mod test_msg_logic_control {
-//     use super::*;
-//     use std::error::Error;
-//     use std::sync::mpsc;
+//
+//
+//
+//
+// (Miguel: Creo que el "full" sobra pero lo deje por las dudas, se puede quitar si se quiere)
+// FUNCION PRINCIPAL
+pub fn full_interaction_with_single_peer(
+    client_peer: &mut Client,
+    server_peer_index: usize,
+) -> Result<(), MsgLogicControlError> {
+    //CONEXION CON UN PEER
+    let mut client_stream =
+        start_connection_with_a_peers(&client_peer.tracker_response.peers, server_peer_index)?;
 
-//     use crate::torrent::data::client_data::{ClientData, ClientState};
-//     use crate::torrent::data::torrent_file_data::TorrentFileData;
-//     use crate::torrent::data::tracker_response_data::{
-//         TrackerResponseData, TrackerResponsePeerData,
-//     };
-//     use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
-//     use crate::torrent::parsers::{p2p, p2p::message::P2PMessage};
-//     use std::io::Write;
-//     use std::net::{SocketAddr, TcpListener};
-//     use std::str::FromStr;
-//     use std::thread;
+    //ENVIO HANDSHAKE
+    send_handshake(client_peer, &mut client_stream)
+        .map_err(|error| MsgLogicControlError::SendingHandshake(format!("{:?}", error)))?;
 
-//     fn create_default_client_peer_with_no_server_peers() -> Result<Client, Box<dyn Error>> {
-//         let server_peer = TrackerResponsePeerData {
-//             peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
-//             peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
-//         };
+    //RECIBO HANDSHAKE
+    let received_handshake = receive_handshake(&mut client_stream)
+        .map_err(|error| MsgLogicControlError::ReceivingHanshake(format!("{:?}", error)))?;
+    check_and_save_handshake_data(client_peer, received_handshake, server_peer_index)?;
 
-//         let tracker_response = TrackerResponseData {
-//             interval: 0,
-//             tracker_id: DEFAULT_TRACKER_ID.to_string(),
-//             complete: 1,
-//             incomplete: 0,
-//             peers: vec![server_peer],
-//         };
-//         let client_data = ClientData {
-//             peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
-//             info_hash: DEFAULT_INFO_HASH.to_vec(),
-//             uploaded: 0,
-//             downloaded: 0,
-//             left: 16,
-//             event: ClientState::Started,
-//             pieces_availability: vec![PieceStatus::MissingPiece],
-//         };
-//         let torrent_file = TorrentFileData {
-//             piece_lenght: 16,
-//             total_amount_pieces: 1,
-//         };
-//         Ok(Client {
-//             client_data,
-//             torrent_file,
-//             tracker_response,
-//             peers_data_list: None,
-//         })
-//     }
+    loop {
+        //RECIBO UN MENSAJE
+        let received_msg = receive_message(&mut client_stream)
+            .map_err(|error| MsgLogicControlError::ReceivingMessage(format!("{:?}", error)))?;
 
-//     fn create_default_client_peer_with_a_server_peer_that_has_just_one_valid_piece(
-//     ) -> Result<Client, Box<dyn Error>> {
-//         let server_peer = TrackerResponsePeerData {
-//             peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
-//             peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
-//         };
-//         let tracker_response = TrackerResponseData {
-//             interval: 0,
-//             tracker_id: DEFAULT_TRACKER_ID.to_string(),
-//             complete: 1,
-//             incomplete: 0,
-//             peers: vec![server_peer],
-//         };
-//         let client_data = ClientData {
-//             peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
-//             info_hash: DEFAULT_INFO_HASH.to_vec(),
-//             uploaded: 0,
-//             downloaded: 0,
-//             left: 16,
-//             event: ClientState::Started,
-//             pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
-//         };
-//         let torrent_file = TorrentFileData {
-//             piece_lenght: 16,
-//             total_amount_pieces: 2,
-//         };
-//         let server_peer_data = PeerData {
-//             peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//             pieces_availability: Some(vec![
-//                 PieceStatus::MissingPiece,
-//                 PieceStatus::ValidAndAvailablePiece,
-//             ]),
-//             am_interested: false,
-//             am_chocking: true,
-//             peer_choking: true,
-//         };
-//         let peers_data_list = Some(PeersDataList {
-//             total_amount_of_peers: 1,
-//             data_list: vec![server_peer_data],
-//         });
-//         Ok(Client {
-//             client_data,
-//             torrent_file,
-//             tracker_response,
-//             peers_data_list,
-//         })
-//     }
+        //REALIZO ACCION SEGUN MENSAJE
+        react_according_to_the_received_msg(client_peer, server_peer_index, received_msg)?;
 
-//     fn create_default_client_peer_with_a_server_peer_that_has_no_valid_pieces(
-//     ) -> Result<Client, Box<dyn Error>> {
-//         let server_peer = TrackerResponsePeerData {
-//             peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
-//             peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
-//         };
-//         let tracker_response = TrackerResponseData {
-//             interval: 0,
-//             tracker_id: DEFAULT_TRACKER_ID.to_string(),
-//             complete: 1,
-//             incomplete: 0,
-//             peers: vec![server_peer],
-//         };
-//         let client_data = ClientData {
-//             peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
-//             info_hash: DEFAULT_INFO_HASH.to_vec(),
-//             uploaded: 0,
-//             downloaded: 0,
-//             left: 16,
-//             event: ClientState::Started,
-//             pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
-//         };
-//         let torrent_file = TorrentFileData {
-//             piece_lenght: 16,
-//             total_amount_pieces: 2,
-//         };
-//         let server_peer_data = PeerData {
-//             peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//             pieces_availability: Some(vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece]),
-//             am_interested: false,
-//             am_chocking: true,
-//             peer_choking: true,
-//         };
-//         let peers_data_list = Some(PeersDataList {
-//             total_amount_of_peers: 1,
-//             data_list: vec![server_peer_data],
-//         });
-//         Ok(Client {
-//             client_data,
-//             torrent_file,
-//             tracker_response,
-//             peers_data_list,
-//         })
-//     }
+        //BUSCO SI TIENE UNA PIEZA QUE ME INTERESE
+        look_for_pieces(client_peer, server_peer_index, &mut client_stream)?;
+        if !am_interested(client_peer, server_peer_index) {
+            return Ok(());
+        }
+    }
+}
 
-//     mod test_check_and_save_handshake_data {
-//         use super::*;
+#[cfg(test)]
+mod test_msg_logic_control {
+    use super::*;
+    use std::collections::HashMap;
+    use std::error::Error;
 
-//         #[test]
-//         fn receive_a_message_that_is_not_a_handshake_error() -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let message = P2PMessage::KeepAlive;
+    use crate::torrent::data::data_of_download::{DataOfDownload, StateOfDownload};
+    use crate::torrent::data::torrent_file_data::TorrentFileData;
+    use crate::torrent::data::tracker_response_data::{
+        PeerDataFromTrackerResponse, TrackerResponseData,
+    };
+    use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
+    use crate::torrent::parsers::p2p::message::P2PMessage;
+    use std::net::SocketAddr;
+    use std::str::FromStr;
 
-//             assert!(
-//                 check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
-//                     .is_err()
-//             );
+    fn create_default_client_peer_with_no_server_peers() -> Result<Client, Box<dyn Error>> {
+        let server_peer = PeerDataFromTrackerResponse {
+            peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
+            peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
+        };
 
-//             Ok(())
-//         }
+        let tracker_response = TrackerResponseData {
+            interval: 0,
+            tracker_id: DEFAULT_TRACKER_ID.to_string(),
+            complete: 1,
+            incomplete: 0,
+            peers: vec![server_peer],
+        };
+        let data_of_download = DataOfDownload {
+            uploaded: 0,
+            downloaded: 0,
+            left: 16,
+            event: StateOfDownload::Started,
+            pieces_availability: vec![PieceStatus::MissingPiece],
+        };
+        let torrent_file = TorrentFileData {
+            url_tracker_main: "tracker_main.com".to_string(),
+            url_tracker_list: vec![],
+            info: HashMap::new(),
+            info_hash: DEFAULT_INFO_HASH.to_vec(),
+            piece_length: 16,
+            total_amount_pieces: 1,
+            total_size: 16,
+        };
+        Ok(Client {
+            peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+            info_hash: DEFAULT_INFO_HASH.to_vec(),
+            data_of_download,
+            torrent_file,
+            tracker_response,
+            list_of_peers_data_for_communication: None,
+        })
+    }
 
-//         #[test]
-//         fn receive_a_handshake_with_an_incorrect_protocol_str_error() -> Result<(), Box<dyn Error>>
-//         {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let message = P2PMessage::Handshake {
-//                 protocol_str: "VitTorrent protocol".to_string(),
-//                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//             };
+    fn create_default_client_peer_with_a_server_peer_that_has_just_one_valid_piece(
+    ) -> Result<Client, Box<dyn Error>> {
+        let server_peer = PeerDataFromTrackerResponse {
+            peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
+            peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
+        };
+        let tracker_response = TrackerResponseData {
+            interval: 0,
+            tracker_id: DEFAULT_TRACKER_ID.to_string(),
+            complete: 1,
+            incomplete: 0,
+            peers: vec![server_peer],
+        };
+        let data_of_download = DataOfDownload {
+            uploaded: 0,
+            downloaded: 0,
+            left: 16,
+            event: StateOfDownload::Started,
+            pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
+        };
+        let torrent_file = TorrentFileData {
+            url_tracker_main: "tracker_main.com".to_string(),
+            url_tracker_list: vec![],
+            info: HashMap::new(),
+            info_hash: DEFAULT_INFO_HASH.to_vec(),
+            piece_length: 16,
+            total_amount_pieces: 2,
+            total_size: 32,
+        };
+        let server_peer_data = PeerDataForP2PCommunication {
+            peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+            pieces_availability: Some(vec![
+                PieceStatus::MissingPiece,
+                PieceStatus::ValidAndAvailablePiece,
+            ]),
+            am_interested: false,
+            am_choking: true,
+            peer_choking: true,
+        };
+        let list_of_peers_data_for_communication = Some(vec![server_peer_data]);
+        Ok(Client {
+            peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+            info_hash: DEFAULT_INFO_HASH.to_vec(),
+            data_of_download,
+            torrent_file,
+            tracker_response,
+            list_of_peers_data_for_communication,
+        })
+    }
 
-//             assert!(
-//                 check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
-//                     .is_err()
-//             );
+    fn create_default_client_peer_with_a_server_peer_that_has_no_valid_pieces(
+    ) -> Result<Client, Box<dyn Error>> {
+        let server_peer = PeerDataFromTrackerResponse {
+            peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
+            peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
+        };
+        let tracker_response = TrackerResponseData {
+            interval: 0,
+            tracker_id: DEFAULT_TRACKER_ID.to_string(),
+            complete: 0,
+            incomplete: 1,
+            peers: vec![server_peer],
+        };
+        let data_of_download = DataOfDownload {
+            uploaded: 0,
+            downloaded: 0,
+            left: 16,
+            event: StateOfDownload::Started,
+            pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
+        };
+        let torrent_file = TorrentFileData {
+            url_tracker_main: "tracker_main.com".to_string(),
+            url_tracker_list: vec![],
+            info: HashMap::new(),
+            info_hash: DEFAULT_INFO_HASH.to_vec(),
+            piece_length: 16,
+            total_amount_pieces: 2,
+            total_size: 32,
+        };
+        let server_peer_data = PeerDataForP2PCommunication {
+            peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+            pieces_availability: Some(vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece]),
+            am_interested: false,
+            am_choking: true,
+            peer_choking: true,
+        };
+        let list_of_peers_data_for_communication = Some(vec![server_peer_data]);
+        Ok(Client {
+            peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+            info_hash: DEFAULT_INFO_HASH.to_vec(),
+            data_of_download,
+            torrent_file,
+            tracker_response,
+            list_of_peers_data_for_communication,
+        })
+    }
 
-//             Ok(())
-//         }
+    mod test_check_and_save_handshake_data {
+        use super::*;
 
-//         #[test]
-//         fn receive_a_handshake_with_an_incorrect_info_hash_error() -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let message = P2PMessage::Handshake {
-//                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//                 info_hash: [1; 20].to_vec(),
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//             };
+        #[test]
+        fn receive_a_message_that_is_not_a_handshake_error() -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let message = P2PMessage::KeepAlive;
 
-//             assert!(
-//                 check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
-//                     .is_err()
-//             );
+            assert!(
+                check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
+                    .is_err()
+            );
 
-//             Ok(())
-//         }
+            Ok(())
+        }
 
-//         #[test]
-//         fn receive_a_handshake_with_an_incorrect_peer_id_error() -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let message = P2PMessage::Handshake {
-//                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-//                 peer_id: "-FA0001-000000000002".to_string(),
-//             };
+        #[test]
+        fn receive_a_handshake_with_an_incorrect_protocol_str_error() -> Result<(), Box<dyn Error>>
+        {
+            let server_piece_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let message = P2PMessage::Handshake {
+                protocol_str: "VitTorrent protocol".to_string(),
+                info_hash: DEFAULT_INFO_HASH.to_vec(),
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+            };
 
-//             assert!(
-//                 check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
-//                     .is_err()
-//             );
+            assert!(
+                check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
+                    .is_err()
+            );
 
-//             Ok(())
-//         }
+            Ok(())
+        }
 
-//         #[test]
-//         fn client_that_has_no_peer_ids_to_check_receive_a_valid_handshake_ok(
-//         ) -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
+        #[test]
+        fn receive_a_handshake_with_an_incorrect_info_hash_error() -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let message = P2PMessage::Handshake {
+                protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+                info_hash: [1; 20].to_vec(),
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+            };
 
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             //MODIFICO EL CLIENTE PARA QUE NO TENGA LOS PEER_ID DE LOS SERVER PEER
-//             client_peer.tracker_response.peers = vec![TrackerResponsePeerData {
-//                 peer_id: None,
-//                 peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
-//             }];
+            assert!(
+                check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
+                    .is_err()
+            );
 
-//             let message = P2PMessage::Handshake {
-//                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//             };
-//             let expected_peer_data = PeerData {
-//                 pieces_availability: None,
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//                 am_interested: false,
-//                 am_chocking: true,
-//                 peer_choking: true,
-//             };
+            Ok(())
+        }
 
-//             assert!(
-//                 check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
-//                     .is_ok()
-//             );
-//             assert!(client_peer.peers_data_list.is_some());
-//             if let Some(peer_data_list) = client_peer.peers_data_list {
-//                 assert_eq!(vec![expected_peer_data], peer_data_list.data_list);
-//                 assert_eq!(1, peer_data_list.total_amount_of_peers);
-//             }
+        #[test]
+        fn receive_a_handshake_with_an_incorrect_peer_id_error() -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let message = P2PMessage::Handshake {
+                protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+                info_hash: DEFAULT_INFO_HASH.to_vec(),
+                peer_id: "-FA0001-000000000002".to_string(),
+            };
 
-//             Ok(())
-//         }
+            assert!(
+                check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
+                    .is_err()
+            );
 
-//         #[test]
-//         fn client_that_has_peer_ids_to_check_receive_a_valid_handshake_ok(
-//         ) -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let message = P2PMessage::Handshake {
-//                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//             };
-//             let expected_peer_data = PeerData {
-//                 pieces_availability: None,
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//                 am_interested: false,
-//                 am_chocking: true,
-//                 peer_choking: true,
-//             };
+            Ok(())
+        }
 
-//             assert!(
-//                 check_and_save_handshake_data(&mut client_peer, message, server_piece_index)
-//                     .is_ok()
-//             );
+        #[test]
+        fn client_that_has_no_peer_ids_to_check_receive_a_valid_handshake_ok(
+        ) -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
 
-//             assert!(client_peer.peers_data_list.is_some());
-//             if let Some(peer_data_list) = client_peer.peers_data_list {
-//                 assert_eq!(vec![expected_peer_data], peer_data_list.data_list);
-//                 assert_eq!(1, peer_data_list.total_amount_of_peers);
-//             }
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            //MODIFICO EL CLIENTE PARA QUE NO TENGA LOS PEER_ID DE LOS SERVER PEER
+            client_peer.tracker_response.peers = vec![PeerDataFromTrackerResponse {
+                peer_id: None,
+                peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
+            }];
 
-//             Ok(())
-//         }
-//     }
+            let message = P2PMessage::Handshake {
+                protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+                info_hash: DEFAULT_INFO_HASH.to_vec(),
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+            };
+            let expected_peer_data = PeerDataForP2PCommunication {
+                pieces_availability: None,
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                am_interested: false,
+                am_choking: true,
+                peer_choking: true,
+            };
 
-//     mod test_update_peer_bitfield {
-//         use super::*;
+            check_and_save_handshake_data(&mut client_peer, message, server_piece_index)?;
 
-//         #[test]
-//         fn update_peer_bitfield_with_less_pieces_error() -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let bitfield = vec![];
+            if let Some(peer_data_list) = client_peer.list_of_peers_data_for_communication {
+                assert_eq!(vec![expected_peer_data], peer_data_list);
+                assert_eq!(1, peer_data_list.len());
+                return Ok(());
+            }
 
-//             let peer_data = PeerData {
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//                 pieces_availability: None,
-//                 am_interested: false,
-//                 am_chocking: true,
-//                 peer_choking: true,
-//             };
-//             let peer_data_list = PeersDataList {
-//                 total_amount_of_peers: 1,
-//                 data_list: vec![peer_data],
-//             };
-//             client_peer.peers_data_list = Some(peer_data_list);
+            Err(Box::new(MsgLogicControlError::Testing(
+                "Couldn`t access to client peer fields.".to_string(),
+            )))
+        }
 
-//             assert!(update_peer_bitfield(&mut client_peer, bitfield, server_piece_index).is_err());
+        #[test]
+        fn client_that_has_peer_ids_to_check_receive_a_valid_handshake_ok(
+        ) -> Result<(), Box<dyn Error>> {
+            let server_peer_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let message = P2PMessage::Handshake {
+                protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+                info_hash: DEFAULT_INFO_HASH.to_vec(),
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+            };
+            let expected_peer_data = PeerDataForP2PCommunication {
+                pieces_availability: None,
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                am_interested: false,
+                am_choking: true,
+                peer_choking: true,
+            };
 
-//             if let Some(peer_data_list) = client_peer.peers_data_list {
-//                 if let Some(server_peer_data) = peer_data_list.data_list.get(server_piece_index) {
-//                     assert!(server_peer_data.pieces_availability.is_none())
-//                 }
-//             }
+            check_and_save_handshake_data(&mut client_peer, message, server_peer_index)?;
 
-//             Ok(())
-//         }
-//         #[test]
-//         fn update_peer_bitfield_with_more_pieces_and_spare_bits_set_error(
-//         ) -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let bitfield = vec![
-//                 PieceStatus::ValidAndAvailablePiece,
-//                 PieceStatus::MissingPiece,
-//                 PieceStatus::ValidAndAvailablePiece,
-//                 PieceStatus::ValidAndAvailablePiece,
-//             ];
+            if let Some(peer_data_list) = client_peer.list_of_peers_data_for_communication {
+                assert_eq!(vec![expected_peer_data], peer_data_list);
+                assert_eq!(1, peer_data_list.len());
+                return Ok(());
+            }
+            Err(Box::new(MsgLogicControlError::Testing(
+                "Couldn`t access to client peer fields.".to_string(),
+            )))
+        }
+    }
 
-//             let peer_data = PeerData {
-//                 pieces_availability: None,
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//                 am_interested: false,
-//                 am_chocking: true,
-//                 peer_choking: true,
-//             };
-//             let peer_data_list = PeersDataList {
-//                 total_amount_of_peers: 1,
-//                 data_list: vec![peer_data],
-//             };
-//             client_peer.peers_data_list = Some(peer_data_list);
+    mod test_update_peer_bitfield {
+        use super::*;
 
-//             assert!(update_peer_bitfield(&mut client_peer, bitfield, server_piece_index).is_err());
+        #[test]
+        fn update_peer_bitfield_with_less_pieces_error() -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let bitfield = vec![];
 
-//             if let Some(peer_data_list) = client_peer.peers_data_list {
-//                 if let Some(server_peer_data) = peer_data_list.data_list.get(server_piece_index) {
-//                     assert!(server_peer_data.pieces_availability.is_none())
-//                 }
-//             }
+            let peer_data = PeerDataForP2PCommunication {
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                pieces_availability: None,
+                am_interested: false,
+                am_choking: true,
+                peer_choking: true,
+            };
+            let peer_data_list = vec![peer_data];
+            client_peer.list_of_peers_data_for_communication = Some(peer_data_list);
 
-//             Ok(())
-//         }
-//         #[test]
-//         fn update_peer_bitfield_with_the_correct_amount_of_pieces_ok() -> Result<(), Box<dyn Error>>
-//         {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let bitfield = vec![PieceStatus::ValidAndAvailablePiece];
+            assert!(update_peer_bitfield(&mut client_peer, bitfield, server_piece_index).is_err());
 
-//             let peer_data = PeerData {
-//                 pieces_availability: None,
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//                 am_interested: false,
-//                 am_chocking: true,
-//                 peer_choking: true,
-//             };
-//             let peer_data_list = PeersDataList {
-//                 total_amount_of_peers: 1,
-//                 data_list: vec![peer_data],
-//             };
-//             client_peer.peers_data_list = Some(peer_data_list);
+            if let Some(peer_data_list) = client_peer.list_of_peers_data_for_communication {
+                if let Some(server_peer_data) = peer_data_list.get(server_piece_index) {
+                    assert!(server_peer_data.pieces_availability.is_none());
+                    return Ok(());
+                }
+            }
 
-//             assert!(update_peer_bitfield(&mut client_peer, bitfield, server_piece_index).is_ok());
+            Err(Box::new(MsgLogicControlError::Testing(
+                "Couldn`t access to client peer fields.".to_string(),
+            )))
+        }
 
-//             if let Some(peer_data_list) = client_peer.peers_data_list {
-//                 if let Some(server_peer_data) = peer_data_list.data_list.get(server_piece_index) {
-//                     assert!(server_peer_data.pieces_availability.is_some());
-//                     if let Some(piece_availability) = &server_peer_data.pieces_availability {
-//                         assert_eq!(
-//                             vec![PieceStatus::ValidAndAvailablePiece],
-//                             *piece_availability
-//                         )
-//                     }
-//                 }
-//             }
-//             Ok(())
-//         }
-//         #[test]
-//         fn update_peer_bitfield_with_more_pieces_and_spare_bits_not_set_ok(
-//         ) -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
-//             let bitfield = vec![
-//                 PieceStatus::ValidAndAvailablePiece,
-//                 PieceStatus::MissingPiece,
-//                 PieceStatus::MissingPiece,
-//                 PieceStatus::MissingPiece,
-//             ];
+        #[test]
+        fn update_peer_bitfield_with_more_pieces_and_spare_bits_set_error(
+        ) -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let bitfield = vec![
+                PieceStatus::ValidAndAvailablePiece,
+                PieceStatus::MissingPiece,
+                PieceStatus::ValidAndAvailablePiece,
+                PieceStatus::ValidAndAvailablePiece,
+            ];
 
-//             let peer_data = PeerData {
-//                 pieces_availability: None,
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//                 am_interested: false,
-//                 am_chocking: true,
-//                 peer_choking: true,
-//             };
-//             let peer_data_list = PeersDataList {
-//                 total_amount_of_peers: 1,
-//                 data_list: vec![peer_data],
-//             };
-//             client_peer.peers_data_list = Some(peer_data_list);
+            let peer_data = PeerDataForP2PCommunication {
+                pieces_availability: None,
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                am_interested: false,
+                am_choking: true,
+                peer_choking: true,
+            };
+            let peer_data_list = vec![peer_data];
+            client_peer.list_of_peers_data_for_communication = Some(peer_data_list);
 
-//             assert!(update_peer_bitfield(&mut client_peer, bitfield, server_piece_index).is_ok());
+            assert!(update_peer_bitfield(&mut client_peer, bitfield, server_piece_index).is_err());
 
-//             if let Some(peer_data_list) = client_peer.peers_data_list {
-//                 if let Some(server_peer_data) = peer_data_list.data_list.get(server_piece_index) {
-//                     assert!(server_peer_data.pieces_availability.is_some());
-//                     if let Some(piece_availability) = &server_peer_data.pieces_availability {
-//                         assert_eq!(
-//                             vec![PieceStatus::ValidAndAvailablePiece],
-//                             *piece_availability
-//                         )
-//                     }
-//                 }
-//             }
-//             Ok(())
-//         }
-//     }
+            if let Some(peer_data_list) = client_peer.list_of_peers_data_for_communication {
+                if let Some(server_peer_data) = peer_data_list.get(server_piece_index) {
+                    assert!(server_peer_data.pieces_availability.is_none());
+                    return Ok(());
+                }
+            }
 
-//     mod test_look_for_a_missing_piece_index {
-//         use super::*;
+            Err(Box::new(MsgLogicControlError::Testing(
+                "Couldn`t access to client peer fields.".to_string(),
+            )))
+        }
 
-//         #[test]
-//         fn the_server_peer_has_a_valid_and_available_piece_in_the_position_one(
-//         ) -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let client_peer =
-//                 create_default_client_peer_with_a_server_peer_that_has_just_one_valid_piece()?;
+        #[test]
+        fn update_peer_bitfield_with_the_correct_amount_of_pieces_ok() -> Result<(), Box<dyn Error>>
+        {
+            let server_piece_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let bitfield = vec![PieceStatus::ValidAndAvailablePiece];
 
-//             assert_eq!(
-//                 Some(1),
-//                 look_for_a_missing_piece_index(&client_peer, server_piece_index)
-//             );
-//             Ok(())
-//         }
+            let peer_data = PeerDataForP2PCommunication {
+                pieces_availability: None,
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                am_interested: false,
+                am_choking: true,
+                peer_choking: true,
+            };
+            let peer_data_list = vec![peer_data];
+            client_peer.list_of_peers_data_for_communication = Some(peer_data_list);
 
-//         #[test]
-//         fn the_server_peer_has_no_pieces() -> Result<(), Box<dyn Error>> {
-//             let server_piece_index = 0;
-//             let client_peer =
-//                 create_default_client_peer_with_a_server_peer_that_has_no_valid_pieces()?;
+            update_peer_bitfield(&mut client_peer, bitfield, server_piece_index)?;
 
-//             assert_eq!(
-//                 None,
-//                 look_for_a_missing_piece_index(&client_peer, server_piece_index)
-//             );
-//             Ok(())
-//         }
-//     }
+            if let Some(peer_data_list) = client_peer.list_of_peers_data_for_communication {
+                if let Some(server_peer_data) = peer_data_list.get(server_piece_index) {
+                    if let Some(piece_availability) = &server_peer_data.pieces_availability {
+                        assert_eq!(
+                            vec![PieceStatus::ValidAndAvailablePiece],
+                            *piece_availability
+                        )
+                    }
+                    return Ok(());
+                }
+            }
+            Err(Box::new(MsgLogicControlError::Testing(
+                "Couldn`t access to client peer fields.".to_string(),
+            )))
+        }
 
-//     mod test_handle_client_communication {
-//         use super::*;
-//         #[test]
-//         fn the_client_send_a_handshake_when_starts_ok() -> Result<(), Box<dyn Error>> {
-//             // ABRO LA CONEXION
-//             let listener = TcpListener::bind(DEFAULT_ADDR)?;
+        #[test]
+        fn update_peer_bitfield_with_more_pieces_and_spare_bits_not_set_ok(
+        ) -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
+            let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let bitfield = vec![
+                PieceStatus::ValidAndAvailablePiece,
+                PieceStatus::MissingPiece,
+                PieceStatus::MissingPiece,
+                PieceStatus::MissingPiece,
+            ];
 
-//             // CREACION DE UN CLIENTE PEER
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+            let peer_data = PeerDataForP2PCommunication {
+                pieces_availability: None,
+                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                am_interested: false,
+                am_choking: true,
+                peer_choking: true,
+            };
+            let peer_data_list = vec![peer_data];
+            client_peer.list_of_peers_data_for_communication = Some(peer_data_list);
 
-//             assert!(handle_client_communication(&mut client_peer, 0).is_err()); //esto tiene que fallar si o si porque no tuvimos una comunucacion exitosa con ese peer.
+            update_peer_bitfield(&mut client_peer, bitfield, server_piece_index)?;
 
-//             //RECIBO LO QUE ME DEBERIA HABER MANDADO EL CLIENTE
-//             let (mut server_stream, _addr) = listener.accept()?;
-//             let received_message = receive_handshake(&mut server_stream)?;
+            if let Some(peer_data_list) = client_peer.list_of_peers_data_for_communication {
+                if let Some(server_peer_data) = peer_data_list.get(server_piece_index) {
+                    if let Some(piece_availability) = &server_peer_data.pieces_availability {
+                        assert_eq!(
+                            vec![PieceStatus::ValidAndAvailablePiece],
+                            *piece_availability
+                        );
+                        return Ok(());
+                    }
+                }
+            }
+            Err(Box::new(MsgLogicControlError::Testing(
+                "Couldn`t access to client peer fields.".to_string(),
+            )))
+        }
+    }
 
-//             assert_eq!(
-//                 P2PMessage::Handshake {
-//                     protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//                     info_hash: DEFAULT_INFO_HASH.to_vec(),
-//                     peer_id: DEFAULT_CLIENT_PEER_ID.to_string(), //no deberia comparar con el peed id para ver si son iguales porque ese valor siempre va a ser aleatorio.
+    mod test_look_for_a_missing_piece_index {
+        use super::*;
 
-//                                                                  // Miguel: No no pero no va a ser aleatorio siempre. Tipo vos vas a generar una vez ese peer id y eso te lo guardas, no vas a ir cambiandolo. Es como la identidad de ese peer, con eso verificas que si sea el mismo de antes.
-//                 },
-//                 received_message
-//             );
-//             Ok(())
-//         }
+        #[test]
+        fn the_server_peer_has_a_valid_and_available_piece_in_the_position_one(
+        ) -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
+            let client_peer =
+                create_default_client_peer_with_a_server_peer_that_has_just_one_valid_piece()?;
 
-//         #[test]
-//         fn the_server_peer_is_added_into_the_peers_data_list_of_the_client_peer_ok(
-//         ) -> Result<(), Box<dyn Error>> {
-//             // ABRO LA CONEXION
-//             let listener = TcpListener::bind(DEFAULT_ADDR)?;
+            assert_eq!(
+                Some(1),
+                look_for_a_missing_piece_index(&client_peer, server_piece_index)
+            );
+            Ok(())
+        }
 
-//             // CREACION DE UN CLIENTE PEER
-//             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
+        #[test]
+        fn the_server_peer_has_no_pieces() -> Result<(), Box<dyn Error>> {
+            let server_piece_index = 0;
+            let client_peer =
+                create_default_client_peer_with_a_server_peer_that_has_no_valid_pieces()?;
 
-//             //THREAD SECUNDARIO PARA EL CLIENTE
-//             let (tx, rx) = mpsc::channel();
-//             let handle = thread::spawn(move || {
-//                 //HANDLEO COMUNICACION
-//                 let _result = handle_client_communication(&mut client_peer, 0); //sacar unwrap
-//                 tx.send(client_peer).unwrap();
-//             });
+            assert_eq!(
+                None,
+                look_for_a_missing_piece_index(&client_peer, server_piece_index)
+            );
+            Ok(())
+        }
+    }
 
-//             //RECIBO LO QUE ME DEBERIA HABER MANDADO EL CLIENTE
-//             let (mut server_stream, _addr) = listener.accept()?;
-//             let received_message = receive_handshake(&mut server_stream)?;
+    mod test_update_server_peer_piece_status {
 
-//             assert_eq!(
-//                 P2PMessage::Handshake {
-//                     protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//                     info_hash: DEFAULT_INFO_HASH.to_vec(),
-//                     peer_id: DEFAULT_CLIENT_PEER_ID.to_string(), //no deberia comparar con el peed id para ver si son iguales porque ese valor siempre va a ser aleatorio
-//                 },
-//                 received_message
-//             );
+        use super::*;
 
-//             //ENVIO UN HANDSHAKE DE RESPUESTA
-//             let server_handshake = P2PMessage::Handshake {
-//                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-//                 peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//             };
-//             let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
-//             server_stream.write_all(&server_handshake_bytes)?;
+        #[test]
+        fn client_peer_update_piece_status_ok() -> Result<(), Box<dyn Error>> {
+            let server_peer_index = 0;
+            let server_piece_index = 1;
+            let mut client_peer =
+                create_default_client_peer_with_a_server_peer_that_has_no_valid_pieces()?;
 
-//             //VEO QUE LE HAYA LLEGADO Y QUE ADEMAS LO ACEPTE
-//             let client_peer = rx.recv()?;
-//             assert!(client_peer.peers_data_list.is_some());
-//             match client_peer.peers_data_list {
-//                 Some(peers_data_list) => {
-//                     assert_eq!(1, peers_data_list.total_amount_of_peers);
-//                     assert_eq!(
-//                         DEFAULT_SERVER_PEER_ID.to_string(),
-//                         peers_data_list.data_list[0].peer_id
-//                     );
-//                     assert!(peers_data_list.data_list[0].pieces_availability.is_none())
-//                 }
-//                 None => (),
-//             }
+            update_server_peer_piece_status(
+                &mut client_peer,
+                server_peer_index,
+                server_piece_index,
+                PieceStatus::ValidAndAvailablePiece,
+            )?;
 
-//             let _joined = handle.join(); //ver que hacer con ese error
+            if let Some(list_of_peers_data_for_communication) =
+                client_peer.list_of_peers_data_for_communication
+            {
+                if let Some(server_peer_data) =
+                    list_of_peers_data_for_communication.get(server_peer_index)
+                {
+                    if let Some(pieces_availability) = &server_peer_data.pieces_availability {
+                        assert_eq!(
+                            pieces_availability.get(usize::try_from(server_piece_index)?),
+                            Some(&PieceStatus::ValidAndAvailablePiece)
+                        );
+                        return Ok(());
+                    }
+                }
+            }
 
-//             Ok(())
-//         }
-//     }
-// }
+            Err(Box::new(MsgLogicControlError::Testing(
+                "Couldn`t access to client peer fields.".to_string(),
+            )))
+        }
+
+        #[test]
+        fn client_peer_cannot_update_piece_status_with_invalid_index_error(
+        ) -> Result<(), Box<dyn Error>> {
+            let server_peer_index = 0;
+            let server_piece_index = 2;
+            let mut client_peer =
+                create_default_client_peer_with_a_server_peer_that_has_no_valid_pieces()?;
+
+            assert_eq!(
+                Err(MsgLogicControlError::UpdatingPieceStatus(
+                    "[MsgLogicControlError] Invalid piece index.".to_string(),
+                )),
+                update_server_peer_piece_status(
+                    &mut client_peer,
+                    server_peer_index,
+                    server_piece_index,
+                    PieceStatus::ValidAndAvailablePiece,
+                )
+            );
+
+            Ok(())
+        }
+    }
+}

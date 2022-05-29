@@ -5,6 +5,7 @@ use std::{error::Error, fmt};
 /// Representa el estado de una pieza para uso en mensaje P2P Bitfield
 pub enum PieceStatus {
     ValidAndAvailablePiece,
+    PartiallyDownloaded { downloaded_bytes: u32 },
     MissingPiece,
 }
 

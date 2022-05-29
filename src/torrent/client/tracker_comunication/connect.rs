@@ -54,7 +54,7 @@ mod test {
             Err(error) => panic!("{:?}", error),
         };
 
-        assert_eq!(torrent.get_piece_lenght(), 262144) //Placeholder para que no de warnings
+        assert_eq!(torrent.get_piece_length(), 262144) //Placeholder para que no de warnings
 
         //init_communication(torrent); //descomentar para ver como devuelve el HashMap de la respuesta
         //Habria que ver como testear la comunicacion ya que podria dar bien, como mal, ya que puede que el tracker

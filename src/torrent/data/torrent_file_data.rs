@@ -9,7 +9,7 @@ type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 
 const ANNOUNCE: &str = "announce";
 const INFO: &str = "info";
-const PIECE_LENGHT: &str = "piece length";
+const PIECE_LENGTH: &str = "piece length";
 const ANNOUNCE_LIST: &str = "announce-list";
 const LENGHT: &str = "length";
 const FILES: &str = "files";
@@ -18,9 +18,9 @@ const FILES: &str = "files";
 pub enum Section {
     Announce,
     Info,
-    PieceLenght,
+    PieceLength,
     Files,
-    Lenght,
+    Length,
 }
 
 #[derive(Debug, PartialEq)]
@@ -38,7 +38,7 @@ pub struct TorrentFileData {
     pub url_tracker_list: Vec<ValuesBencoding>,
     pub info: DicValues,
     pub info_hash: Vec<u8>,
-    pub piece_lenght: i64,
+    pub piece_length: i64,
     pub total_amount_pieces: usize,
     pub total_size: i64,
 }
@@ -85,11 +85,11 @@ fn init_info_hash(dic_info: &DicValues) -> Result<Vec<u8>, ErrorTorrent> {
     Ok(info_hash)
 }
 
-fn init_piece_lenght(dic_info: &DicValues) -> Result<i64, ErrorTorrent> {
-    match dic_info.get(&PIECE_LENGHT.as_bytes().to_vec()) {
-        Some(ValuesBencoding::Integer(lenght)) => Ok(*lenght),
-        Some(_) => Err(ErrorTorrent::Format(Section::PieceLenght)),
-        None => Err(ErrorTorrent::NotFound(Section::PieceLenght)),
+fn init_piece_length(dic_info: &DicValues) -> Result<i64, ErrorTorrent> {
+    match dic_info.get(&PIECE_LENGTH.as_bytes().to_vec()) {
+        Some(ValuesBencoding::Integer(length)) => Ok(*length),
+        Some(_) => Err(ErrorTorrent::Format(Section::PieceLength)),
+        None => Err(ErrorTorrent::NotFound(Section::PieceLength)),
     }
 }
 
@@ -101,24 +101,24 @@ fn init_tracker_list(dic_torrent: &DicValues) -> Result<Vec<ValuesBencoding>, Er
 }
 
 fn init_total_size(dic_info: &DicValues) -> Result<i64, ErrorTorrent> {
-    //Si es single file solo tomo el valor de lenght
-    if let Some(ValuesBencoding::Integer(lenght)) = dic_info.get(&LENGHT.as_bytes().to_vec()) {
-        return Ok(*lenght);
+    //Si es single file solo tomo el valor de length
+    if let Some(ValuesBencoding::Integer(length)) = dic_info.get(&LENGHT.as_bytes().to_vec()) {
+        return Ok(*length);
     }
-    //Si es multiple file recorro la lista de diccionarios de todos los archivos y sumo sus lenghts
-    let mut lenght_total = 0;
+    //Si es multiple file recorro la lista de diccionarios de todos los archivos y sumo sus lengths
+    let mut length_total = 0;
     match dic_info.get(&FILES.as_bytes().to_vec()) {
         Some(ValuesBencoding::List(list_files)) => {
             for file in list_files {
                 if let ValuesBencoding::Dic(dic_file) = file {
                     match dic_file.get(&LENGHT.as_bytes().to_vec()) {
-                        Some(ValuesBencoding::Integer(lenght)) => lenght_total += lenght,
-                        Some(_) => return Err(ErrorTorrent::Format(Section::Lenght)),
-                        None => return Err(ErrorTorrent::NotFound(Section::Lenght)),
+                        Some(ValuesBencoding::Integer(length)) => length_total += length,
+                        Some(_) => return Err(ErrorTorrent::Format(Section::Length)),
+                        None => return Err(ErrorTorrent::NotFound(Section::Length)),
                     }
                 }
             }
-            Ok(lenght_total)
+            Ok(length_total)
         }
         Some(_) => Err(ErrorTorrent::Format(Section::Files)),
         None => Err(ErrorTorrent::NotFound(Section::Files)),
@@ -133,15 +133,15 @@ impl TorrentFileData {
             info: init_info(&dic_torrent)?,
             info_hash: vec![],
             total_size: 0,
-            piece_lenght: 0,
+            piece_length: 0,
             total_amount_pieces: 0,
         };
         torrent.info_hash = init_info_hash(&torrent.info)?;
-        torrent.piece_lenght = init_piece_lenght(&torrent.info)?;
+        torrent.piece_length = init_piece_length(&torrent.info)?;
         torrent.total_size = init_total_size(&torrent.info)?;
         let mut total_amount_pieces =
-            (torrent.get_total_size() / torrent.get_piece_lenght()) as usize;
-        if torrent.total_size % torrent.piece_lenght > 0 {
+            (torrent.get_total_size() / torrent.get_piece_length()) as usize;
+        if torrent.total_size % torrent.piece_length > 0 {
             total_amount_pieces += 1;
         }
         torrent.total_amount_pieces = total_amount_pieces;
@@ -161,8 +161,8 @@ impl TorrentFileData {
         self.total_size
     }
 
-    pub fn get_piece_lenght(&self) -> i64 {
-        self.piece_lenght
+    pub fn get_piece_length(&self) -> i64 {
+        self.piece_length
     }
 
     pub fn get_total_amount_pieces(&self) -> usize {
@@ -193,7 +193,7 @@ mod test {
         let tracker_main = String::from("http://torrent.ubuntu.com:6969/announce");
 
         assert_eq!(torrent.get_tracker_main(), tracker_main);
-        assert_eq!(torrent.get_piece_lenght(), 524288);
+        assert_eq!(torrent.get_piece_length(), 524288);
         assert_eq!(torrent.get_total_size(), 600401920);
         assert_eq!(torrent.get_total_amount_pieces(), 1146);
     }
@@ -214,7 +214,7 @@ mod test {
         let tracker_main = String::from("udp://tracker.leechers-paradise.org:6969");
 
         assert_eq!(torrent.get_tracker_main(), tracker_main);
-        assert_eq!(torrent.get_piece_lenght(), 262144);
+        assert_eq!(torrent.get_piece_length(), 262144);
         assert_eq!(torrent.get_total_size(), 140 + 276134947 + 310380);
         assert_eq!(torrent.get_total_amount_pieces(), 1055);
     }

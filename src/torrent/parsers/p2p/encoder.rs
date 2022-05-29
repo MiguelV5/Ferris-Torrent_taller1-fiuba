@@ -99,16 +99,9 @@ fn append_payload_to_encoded_bitfield(
     let mut i = 0;
     let mut bitfield_statuses_iter = bitfield_piece_statuses.iter();
     while i < payload_length_in_bytes * 8 {
-        if let Some(piece_status) = bitfield_statuses_iter.next() {
-            match *piece_status {
-                PieceStatus::ValidAndAvailablePiece => {
-                    bit_accumulator <<= 1;
-                    bit_accumulator |= mask_to_set_last_bit;
-                }
-                PieceStatus::MissingPiece => {
-                    bit_accumulator <<= 1;
-                }
-            };
+        if let Some(PieceStatus::ValidAndAvailablePiece) = bitfield_statuses_iter.next() {
+            bit_accumulator <<= 1;
+            bit_accumulator |= mask_to_set_last_bit;
         } else {
             bit_accumulator <<= 1;
         };

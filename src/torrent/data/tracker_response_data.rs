@@ -3,7 +3,7 @@
 use std::net::SocketAddr;
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct TrackerResponsePeerData {
+pub struct PeerDataFromTrackerResponse {
     pub peer_id: Option<String>,
     pub peer_address: SocketAddr,
 }
@@ -15,5 +15,5 @@ pub struct TrackerResponseData {
     pub tracker_id: String,
     pub complete: u32,
     pub incomplete: u32,
-    pub peers: Vec<TrackerResponsePeerData>,
+    pub peers: Vec<PeerDataFromTrackerResponse>,
 }
