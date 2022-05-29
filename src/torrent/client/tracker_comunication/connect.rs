@@ -1,21 +1,27 @@
 #![allow(dead_code)]
 extern crate rand;
 
-use crate::torrent::client::tracker_comunication::http_handler::HttpHandler;
 use crate::torrent::data::torrent_file_data::TorrentFileData;
+use crate::torrent::{
+    client::tracker_comunication::http_handler::HttpHandler,
+    parsers::bencoding::values::ValuesBencoding,
+};
 use rand::{distributions::Alphanumeric, *};
+use std::{collections::HashMap, error::Error};
 
 const SIZE_PEER_ID: usize = 20;
 
-pub fn init_communication(torrent: TorrentFileData) {
+pub fn init_communication(
+    torrent: TorrentFileData,
+) -> Result<HashMap<Vec<u8>, ValuesBencoding>, Box<dyn Error>> {
     //Solo lo puse todo entero aca para que quede el ejemplo de como crear el dicc de la respuesta por ahora
-
-    let http_handler = HttpHandler::new(torrent).unwrap();
-    let response = http_handler.tracker_get_response();
-    println!("{:?}", response)
+    let http_handler = HttpHandler::new(torrent, generate_peer_id())?;
+    let response = http_handler.tracker_get_response()?;
+    //println!("{:?}", response);
+    Ok(response)
 }
 
-fn generate_peer_id() -> String {
+pub fn generate_peer_id() -> String {
     let peer_id: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(SIZE_PEER_ID)

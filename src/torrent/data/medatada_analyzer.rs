@@ -2,7 +2,9 @@
 use crate::torrent::parsers::bencoding;
 use crate::torrent::parsers::bencoding::values::{ErrorBencoding, ValuesBencoding};
 use std::collections::HashMap;
+use std::error::Error;
 use std::ffi::OsStr;
+use std::fmt;
 use std::io::Read;
 use std::{fs::File, path::Path};
 
@@ -18,6 +20,14 @@ pub enum MetadataError {
     Reading,
     TransferToDic(ErrorBencoding),
 }
+
+impl fmt::Display for MetadataError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error del torrent.\n Backtrace: {:?}\n", self)
+    }
+}
+
+impl Error for MetadataError {}
 
 /// Se encarga de leer la información del .torrent
 /// Devuelve un String con la información del archivo leído, y se encuentra en formato Bencoding

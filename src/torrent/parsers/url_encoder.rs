@@ -75,4 +75,18 @@ mod tests {
                 .to_vec()
         );
     }
+    #[test]
+    fn bytes_encodes_ok() {
+        let bytes = &[
+            0xACu8, 0xC3u8, 0xB2u8, 0xE4u8, 0x33u8, 0xD7u8, 0xC7u8, 0x47u8, 0x5Au8, 0xBBu8, 0x59u8,
+            0x41u8, 0xB5u8, 0x68u8, 0x1Cu8, 0xB7u8, 0xA1u8, 0xEAu8, 0x26u8, 0xE2u8,
+        ];
+        let result = from_string(bytes.to_vec());
+        assert_eq!(
+            result,
+            "%ac%c3%b2%e43%d7%c7GZ%bbYA%b5h%1c%b7%a1%ea%26%e2"
+                .as_bytes()
+                .to_vec()
+        );
+    }
 }

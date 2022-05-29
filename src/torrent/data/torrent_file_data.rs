@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use sha1::{Digest, Sha1};
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error, fmt};
 
 use super::super::parsers::bencoding::values::ValuesBencoding;
 use crate::torrent::parsers::*;
@@ -42,6 +42,14 @@ pub struct TorrentFileData {
     pub total_amount_pieces: usize,
     pub total_size: i64,
 }
+
+impl fmt::Display for ErrorTorrent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error del torrent.\n Backtrace: {:?}\n", self)
+    }
+}
+
+impl Error for ErrorTorrent {}
 
 fn vec_u8_to_string(vec: &[u8]) -> String {
     String::from_utf8_lossy(vec).to_string()
