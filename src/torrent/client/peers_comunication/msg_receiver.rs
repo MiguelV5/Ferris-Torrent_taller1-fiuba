@@ -83,26 +83,81 @@ pub fn receive_message(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiver
 #[cfg(test)]
 mod test_msg_receiver {
     use super::*;
+    use crate::torrent::{
+        client::peers_comunication::msg_logic_control::DEFAULT_ADDR,
+        parsers::p2p::constants::PSTR_STRING_HANDSHAKE,
+    };
     use std::error::Error;
+    use std::{io::Write, net::TcpListener};
+
+    //
+    // AUX PARA CONEXIONES:
+    use std::io::ErrorKind;
+    const LOCALHOST: &str = "127.0.0.1";
+    const STARTING_PORT: u16 = 8080;
+    const MAX_TESTING_PORT: u16 = 9080;
+
+    #[derive(PartialEq, Debug)]
+    enum PortBindingError {
+        ReachedMaxPortWithoutFindingAnAvailableOne,
+    }
+
+    impl fmt::Display for PortBindingError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{:?}", self)
+        }
+    }
+
+    impl Error for PortBindingError {}
+
+    fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
+        let mut new_port: u16 = current_port;
+        if current_port >= MAX_TESTING_PORT {
+            Err(PortBindingError::ReachedMaxPortWithoutFindingAnAvailableOne)
+        } else {
+            new_port += 1;
+            Ok(new_port)
+        }
+    }
+
+    // Busca bindear un listener mientras que el error sea por causa de una direccion que ya está en uso.
+    fn try_bind_listener(first_port: u16) -> Result<(TcpListener, String), Box<dyn Error>> {
+        let mut listener = TcpListener::bind(format!("{}:{}", LOCALHOST, first_port));
+
+        let mut current_port = first_port;
+
+        while let Err(bind_err) = listener {
+            if bind_err.kind() != ErrorKind::AddrInUse {
+                return Err(Box::new(bind_err));
+            } else {
+                current_port = update_port(current_port)?;
+                listener = TcpListener::bind(format!("{}:{}", LOCALHOST, current_port));
+            }
+        }
+        let resulting_listener = listener?; // SI BIEN TIENE ?; ACÁ NUNCA VA A SER UN ERROR
+
+        Ok((
+            resulting_listener,
+            format!("{}:{}", LOCALHOST, current_port),
+        ))
+    }
+
+    //
+    //
 
     mod test_receive_handshake {
         use super::*;
-        use crate::torrent::{
-            client::peers_comunication::msg_logic_control::DEFAULT_ADDR,
-            parsers::p2p::constants::PSTR_STRING_HANDSHAKE,
-        };
-        use std::{io::Write, net::TcpListener};
 
         #[test]
         fn receive_handshake_ok() -> Result<(), Box<dyn Error>> {
-            let listener = TcpListener::bind(DEFAULT_ADDR)?;
-            let mut sender_stream = TcpStream::connect(DEFAULT_ADDR)?;
+            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let handshake = P2PMessage::Handshake {
                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
                 info_hash: [1; 20].to_vec(),
-                peer_id: "-FA0001-000000000000".to_string(),
+                peer_id: "-FA0001-000000000000".bytes().collect(),
             };
 
             let buffer = p2p::encoder::to_bytes(handshake.clone())?;
@@ -114,14 +169,15 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_hanshake_with_less_bytes_error() -> Result<(), Box<dyn Error>> {
-            let listener = TcpListener::bind(DEFAULT_ADDR)?;
-            let mut sender_stream = TcpStream::connect(DEFAULT_ADDR)?;
+            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let mut sender_stream = TcpStream::connect(address)?;
+            TcpStream::connect(DEFAULT_ADDR)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let handshake = P2PMessage::Handshake {
                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
                 info_hash: [1; 20].to_vec(),
-                peer_id: "-FA0001-000000000000".to_string(),
+                peer_id: "-FA0001-000000000000".bytes().collect(),
             };
 
             let mut buffer = p2p::encoder::to_bytes(handshake.clone())?;
@@ -134,14 +190,14 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_hanshake_with_invalid_fields_error() -> Result<(), Box<dyn Error>> {
-            let listener = TcpListener::bind(DEFAULT_ADDR)?;
-            let mut sender_stream = TcpStream::connect(DEFAULT_ADDR)?;
+            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let handshake = P2PMessage::Handshake {
                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
                 info_hash: [1; 20].to_vec(),
-                peer_id: "-FA0001-000000000000".to_string(),
+                peer_id: "-FA0001-000000000000".bytes().collect(),
             };
 
             let mut buffer = p2p::encoder::to_bytes(handshake.clone())?;
@@ -155,13 +211,11 @@ mod test_msg_receiver {
 
     mod test_receive_message {
         use super::*;
-        use crate::torrent::client::peers_comunication::msg_logic_control::DEFAULT_ADDR;
-        use std::{io::Write, net::TcpListener};
 
         #[test]
         fn receive_message_keep_alive_ok() -> Result<(), Box<dyn Error>> {
-            let listener = TcpListener::bind(DEFAULT_ADDR)?;
-            let mut sender_stream = TcpStream::connect(DEFAULT_ADDR)?;
+            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let message = P2PMessage::KeepAlive;
@@ -176,8 +230,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_with_id_ok() -> Result<(), Box<dyn Error>> {
-            let listener = TcpListener::bind(DEFAULT_ADDR)?;
-            let mut sender_stream = TcpStream::connect(DEFAULT_ADDR)?;
+            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let message = P2PMessage::Choke;
@@ -192,8 +246,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_with_id_and_payload_ok() -> Result<(), Box<dyn Error>> {
-            let listener = TcpListener::bind(DEFAULT_ADDR)?;
-            let mut sender_stream = TcpStream::connect(DEFAULT_ADDR)?;
+            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let message = P2PMessage::Have { piece_index: 1 };
@@ -208,8 +262,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_with_more_than_one_msg_ok() -> Result<(), Box<dyn Error>> {
-            let listener = TcpListener::bind(DEFAULT_ADDR)?;
-            let mut sender_stream = TcpStream::connect(DEFAULT_ADDR)?;
+            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let message1 = P2PMessage::Choke;
@@ -232,8 +286,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_with_less_bytes_error() -> Result<(), Box<dyn Error>> {
-            let listener = TcpListener::bind(DEFAULT_ADDR)?;
-            let mut sender_stream = TcpStream::connect(DEFAULT_ADDR)?;
+            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let message = P2PMessage::Have { piece_index: 1 };

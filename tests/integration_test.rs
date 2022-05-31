@@ -1,5 +1,6 @@
-//use std::collections::HashMap;
+use core::fmt;
 use std::error::Error;
+use std::io::ErrorKind;
 use std::sync::mpsc;
 
 use fa_torrent::torrent::client::client_struct::Client;
@@ -18,18 +19,37 @@ use std::net::{SocketAddr, TcpListener};
 use std::str::FromStr;
 use std::thread;
 
-pub const DEFAULT_ADDR_1: &str = "127.0.0.1:7878";
-pub const DEFAULT_ADDR_2: &str = "127.0.0.1:7979";
-pub const DEFAULT_ADDR_3: &str = "127.0.0.1:8080";
+const LOCALHOST: &str = "127.0.0.1";
+const STARTING_PORT: u16 = 8080;
+const MAX_TESTING_PORT: u16 = 9080;
+// pub const DEFAULT_ADDR_1: &str = "127.0.0.1:7878";
+// pub const DEFAULT_ADDR_2: &str = "127.0.0.1:7979";
+// pub const DEFAULT_ADDR_3: &str = "127.0.0.1:8080";
 pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
 pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
 pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
 pub const DEFAULT_TRACKER_MAIN: &str = "tracker_main.com";
 pub const DEFAULT_INFO_HASH: [u8; 20] = [0; 20];
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum TestingError {
+    ClientPeerFieldsInvalidAccess(String),
+}
+
+impl fmt::Display for TestingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Error for TestingError {}
+
+//
+// FUNCIONES AUXILIARES:
+//
 fn create_default_client_peer(peer_address: SocketAddr) -> Result<Client, Box<dyn Error>> {
     let server_peer = PeerDataFromTrackerResponse {
-        peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
+        peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
         peer_address,
     };
 
@@ -60,25 +80,73 @@ fn create_default_client_peer(peer_address: SocketAddr) -> Result<Client, Box<dy
         total_size: 16,
     };
     Ok(Client {
-        peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+        peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
         info_hash: DEFAULT_INFO_HASH.to_vec(),
 
         data_of_download,
         torrent_file,
-        tracker_response,
+        tracker_response: Some(tracker_response),
         list_of_peers_data_for_communication: None,
     })
 }
 
+#[derive(PartialEq, Debug)]
+enum PortBindingError {
+    ReachedMaxPortWithoutFindingAnAvailableOne,
+}
+
+impl fmt::Display for PortBindingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Error for PortBindingError {}
+
+fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
+    let mut new_port: u16 = current_port;
+    if current_port >= MAX_TESTING_PORT {
+        Err(PortBindingError::ReachedMaxPortWithoutFindingAnAvailableOne)
+    } else {
+        new_port += 1;
+        Ok(new_port)
+    }
+}
+
+// Busca bindear un listener mientras que el error sea por causa de una direccion que ya está en uso.
+fn try_bind_listener(first_port: u16) -> Result<(TcpListener, String), Box<dyn Error>> {
+    let mut listener = TcpListener::bind(format!("{}:{}", LOCALHOST, first_port));
+
+    let mut current_port = first_port;
+
+    while let Err(bind_err) = listener {
+        if bind_err.kind() != ErrorKind::AddrInUse {
+            return Err(Box::new(bind_err));
+        } else {
+            current_port = update_port(current_port)?;
+            listener = TcpListener::bind(format!("{}:{}", LOCALHOST, current_port));
+        }
+    }
+    let resulting_listener = listener?; // SI BIEN TIENE ?; ACÁ NUNCA VA A SER UN ERROR
+
+    Ok((
+        resulting_listener,
+        format!("{}:{}", LOCALHOST, current_port),
+    ))
+}
+
+//
+// TESTS:
+//
 #[test]
 fn the_client_send_a_handshake_when_starts_ok() -> Result<(), Box<dyn Error>> {
     // ABRO LA CONEXION
-    let listener = TcpListener::bind(DEFAULT_ADDR_1)?;
+    let (listener, address) = try_bind_listener(STARTING_PORT)?;
 
     // CREACION DE UN CLIENTE PEER
-    let mut client_peer = create_default_client_peer(SocketAddr::from_str(DEFAULT_ADDR_1)?)?;
+    let mut client_peer = create_default_client_peer(SocketAddr::from_str(&address)?)?;
 
-    assert!(msg_logic_control::full_interaction_with_single_peer(&mut client_peer, 0).is_err());
+    assert!(msg_logic_control::interact_with_single_peer(&mut client_peer, 0).is_err());
 
     //RECIBO LO QUE ME DEBERIA HABER MANDADO EL CLIENTE
     let (mut server_stream, _addr) = listener.accept()?;
@@ -88,7 +156,7 @@ fn the_client_send_a_handshake_when_starts_ok() -> Result<(), Box<dyn Error>> {
         P2PMessage::Handshake {
             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
-            peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+            peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
         },
         received_message
     );
@@ -98,16 +166,16 @@ fn the_client_send_a_handshake_when_starts_ok() -> Result<(), Box<dyn Error>> {
 #[test]
 fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
     // ABRO LA CONEXION
-    let listener = TcpListener::bind(DEFAULT_ADDR_2)?;
+    let (listener, address) = try_bind_listener(STARTING_PORT)?;
 
     // CREACION DE UN CLIENTE PEER
-    let mut client_peer = create_default_client_peer(SocketAddr::from_str(DEFAULT_ADDR_2)?)?;
+    let mut client_peer = create_default_client_peer(SocketAddr::from_str(&address)?)?;
 
     //THREAD SECUNDARIO PARA EL CLIENTE
     let (tx, rx) = mpsc::channel();
     let handle = thread::spawn(move || {
         //HANDLEO COMUNICACION
-        let _result = msg_logic_control::full_interaction_with_single_peer(&mut client_peer, 0);
+        let _result = msg_logic_control::interact_with_single_peer(&mut client_peer, 0);
         tx.send(client_peer).unwrap();
     });
 
@@ -119,7 +187,7 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
         P2PMessage::Handshake {
             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
-            peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+            peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
         },
         received_message
     );
@@ -128,22 +196,19 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
     let server_handshake = P2PMessage::Handshake {
         protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
         info_hash: DEFAULT_INFO_HASH.to_vec(),
-        peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+        peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
     };
     let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
     server_stream.write_all(&server_handshake_bytes)?;
 
     //VEO QUE LE HAYA LLEGADO Y QUE ADEMAS LO ACEPTE
     let client_peer = rx.recv()?;
-    assert!(client_peer.list_of_peers_data_for_communication.is_some());
     if let Some(list_of_peers_data_for_communication) =
         client_peer.list_of_peers_data_for_communication
     {
         assert_eq!(1, list_of_peers_data_for_communication.len());
-        assert_eq!(
-            DEFAULT_SERVER_PEER_ID.to_string(),
-            list_of_peers_data_for_communication[0].peer_id
-        );
+        let expected_id: Vec<u8> = DEFAULT_SERVER_PEER_ID.bytes().collect();
+        assert_eq!(expected_id, list_of_peers_data_for_communication[0].peer_id);
         assert!(list_of_peers_data_for_communication[0]
             .pieces_availability
             .is_none());
@@ -152,107 +217,108 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    // esto deberia ser un error
-    Ok(())
+    Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
+        "Couldn`t access to client peer fields.".to_string(),
+    )))
 }
 
-//COMENTADO TEMPORAL PARA MERGEO DEL TRABAJO DE TODOS EN MAIN. PODES SEGUIR TRABAJANDO EN ESTA RAMA IGUAL, HICE UNA COPIA ESPECIFICA PARA MERGEAR ASI PODES DESCOMENTAR ESTO Y LISTO, PASA QUE EL TEST ESTA FALLANDO
-// #[test]
-// fn client_peer_interact_with_a_peer_ok() -> Result<(), Box<dyn Error>> {
-//     // ABRO LA CONEXION
-//     let listener = TcpListener::bind(DEFAULT_ADDR_3)?;
+#[test]
+fn client_peer_interact_with_a_peer_ok() -> Result<(), Box<dyn Error>> {
+    // ABRO LA CONEXION
+    let (listener, address) = try_bind_listener(STARTING_PORT)?;
 
-//     // CREACION DE UN CLIENTE PEER
-//     let mut client_peer = create_default_client_peer(SocketAddr::from_str(DEFAULT_ADDR_3)?)?;
+    // CREACION DE UN CLIENTE PEER
+    let mut client_peer = create_default_client_peer(SocketAddr::from_str(&address)?)?;
 
-//     //THREAD SECUNDARIO PARA EL CLIENTE
-//     let (tx, rx) = mpsc::channel();
-//     let handle = thread::spawn(move || {
-//         //HANDLEO COMUNICACION
-//         let _result = msg_logic_control::full_interaction_with_single_peer(&mut client_peer, 0);
-//         tx.send(client_peer).unwrap();
-//     });
+    //THREAD SECUNDARIO PARA EL CLIENTE
+    let (tx, rx) = mpsc::channel();
+    let handle = thread::spawn(move || {
+        //HANDLEO COMUNICACION
+        let _result = msg_logic_control::interact_with_single_peer(&mut client_peer, 0);
+        tx.send(client_peer).unwrap();
+    });
 
-//     let (mut server_stream, _addr) = listener.accept()?;
+    let (mut server_stream, _addr) = listener.accept()?;
 
-//     //SERVER PEER RECIBE UN HANDSHAKE
-//     let received_message = msg_receiver::receive_handshake(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Handshake {
-//             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//             info_hash: DEFAULT_INFO_HASH.to_vec(),
-//             peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
-//         },
-//         received_message
-//     );
+    //SERVER PEER RECIBE UN HANDSHAKE
+    let received_message = msg_receiver::receive_handshake(&mut server_stream)?;
+    assert_eq!(
+        P2PMessage::Handshake {
+            protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+            info_hash: DEFAULT_INFO_HASH.to_vec(),
+            peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
+        },
+        received_message
+    );
 
-//     //SERVER PEER ENVIA UN HANDSHAKE DE RESPUESTA
-//     let server_handshake = P2PMessage::Handshake {
-//         protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//         info_hash: DEFAULT_INFO_HASH.to_vec(),
-//         peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
-//     };
-//     let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
-//     server_stream.write_all(&server_handshake_bytes)?;
+    //SERVER PEER ENVIA UN HANDSHAKE DE RESPUESTA
+    let server_handshake = P2PMessage::Handshake {
+        protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+        info_hash: DEFAULT_INFO_HASH.to_vec(),
+        peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
+    };
+    let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
+    server_stream.write_all(&server_handshake_bytes)?;
 
-//     //SERVER PEER ENVIA UN BITFIELD
-//     let server_msg = P2PMessage::Bitfield {
-//         bitfield: vec![PieceStatus::ValidAndAvailablePiece],
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
+    //SERVER PEER ENVIA UN BITFIELD
+    let server_msg = P2PMessage::Bitfield {
+        bitfield: vec![PieceStatus::ValidAndAvailablePiece],
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
 
-//     //SERVER PEER RECIVE UN INTERESTED
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(P2PMessage::Interested, received_message);
+    //SERVER PEER RECIVE UN INTERESTED
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(P2PMessage::Interested, received_message);
 
-//     //SERVER PEER ENVIA UN UNCHOKE
-//     let server_msg = P2PMessage::Unchoke;
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
+    //SERVER PEER ENVIA UN UNCHOKE
+    let server_msg = P2PMessage::Unchoke;
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
 
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: 0,
-//             amount_of_bytes: 16
-//         },
-//         received_message
-//     );
+    //SERVER PEER RECIBE UN REQUEST
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(
+        P2PMessage::Request {
+            piece_index: 0,
+            beginning_byte_index: 0,
+            amount_of_bytes: 16
+        },
+        received_message
+    );
 
-//     //SERVER PEER ENVIA UN BLOQUE QUE CORRESPONDE A LA PIEZA ENTERA
-//     let server_msg = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: 0,
-//         block: [0; 16].to_vec(),
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
+    //SERVER PEER ENVIA UN BLOQUE QUE CORRESPONDE A LA PIEZA ENTERA
+    let server_msg = P2PMessage::Piece {
+        piece_index: 0,
+        beginning_byte_index: 0,
+        block: [10; 16].to_vec(),
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
 
-//     //VEO QUE LE HAYA LLEGADO Y QUE ADEMAS LO ACEPTE
-//     let client_peer = rx.recv()?;
-//     assert!(client_peer.list_of_peers_data_for_communication.is_some());
-//     if let Some(list_of_peers_data_for_communication) =
-//         client_peer.list_of_peers_data_for_communication
-//     {
-//         assert_eq!(1, list_of_peers_data_for_communication.len());
-//         assert_eq!(
-//             DEFAULT_SERVER_PEER_ID.to_string(),
-//             list_of_peers_data_for_communication[0].peer_id
-//         );
-//         if let Some(pieces_availability) =
-//             &list_of_peers_data_for_communication[0].pieces_availability
-//         {
-//             assert_eq!(
-//                 vec![PieceStatus::ValidAndAvailablePiece,],
-//                 *pieces_availability
-//             );
-//         }
-//     }
+    //VEO QUE LE HAYA LLEGADO Y QUE ADEMAS LO ACEPTE
+    let client_peer = rx.recv()?;
+    assert!(client_peer.list_of_peers_data_for_communication.is_some());
+    if let Some(list_of_peers_data_for_communication) =
+        client_peer.list_of_peers_data_for_communication
+    {
+        assert_eq!(1, list_of_peers_data_for_communication.len());
+        let expected_id: Vec<u8> = DEFAULT_SERVER_PEER_ID.bytes().collect();
+        assert_eq!(expected_id, list_of_peers_data_for_communication[0].peer_id);
 
-//     // esto deberia ser un error
-//     let _joined = handle.join(); //ver que hacer con ese error
-//     Ok(())
-// }
+        if let Some(pieces_availability) =
+            &list_of_peers_data_for_communication[0].pieces_availability
+        {
+            assert_eq!(
+                vec![PieceStatus::ValidAndAvailablePiece,],
+                *pieces_availability
+            );
+            let _joined = handle.join(); //ver que hacer con ese error
+            return Ok(());
+        }
+    }
+
+    Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
+        "Couldn`t access to client peer fields.".to_string(),
+    )))
+}

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use super::super::client_struct::Client;
-use super::msg_logic_control::{full_interaction_with_single_peer, MsgLogicControlError};
+use super::msg_logic_control::{interact_with_single_peer, MsgLogicControlError};
 
 // (ESTAS SON LAS NOTAS VIEJAS QUE ESTABAN EN EL OTRO ARCHIVO PERO LAS TRAJE PARA ACA):
 // Notas
@@ -18,6 +18,6 @@ pub fn handle_general_interaction(client: &mut Client) -> Result<(), MsgLogicCon
 
     //...
     // POR AHORA; MIENTRAS QUE SE REQUIERE SOLO UN PEER A COMPLETAR UNA PIEZA:
-    full_interaction_with_single_peer(client, 0)
+    interact_with_single_peer(client, 0)
     // (falta, pero ir viendo nota de msg_logic_control.rs:react_according_to_the_received_msg: caso Piece)
 }

@@ -2,7 +2,7 @@ use crate::torrent::parsers::p2p::message::PieceStatus;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct PeerDataForP2PCommunication {
-    pub peer_id: String,
+    pub peer_id: Vec<u8>,
     pub pieces_availability: Option<Vec<PieceStatus>>,
     pub am_choking: bool,
     pub am_interested: bool,

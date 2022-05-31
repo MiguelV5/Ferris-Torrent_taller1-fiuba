@@ -44,7 +44,7 @@ pub enum P2PMessage {
     Handshake {
         protocol_str: String,
         info_hash: Vec<u8>, // Valor del SHA1
-        peer_id: String,
+        peer_id: Vec<u8>,
     },
 }
 

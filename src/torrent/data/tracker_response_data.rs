@@ -35,7 +35,7 @@ pub enum ResponseError {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct PeerDataFromTrackerResponse {
-    pub peer_id: Option<String>,
+    pub peer_id: Option<Vec<u8>>,
     pub peer_address: SocketAddr,
 }
 
@@ -76,7 +76,7 @@ impl PeerDataFromTrackerResponse {
         let ip_addr = from_str_to_ipaddr(ip)?;
         let peer_address = SocketAddr::new(ip_addr, port);
         if !id.is_empty() {
-            peer_id = Some(String::from_utf8_lossy(&id).to_string());
+            peer_id = Some(id);
         }
 
         Ok(PeerDataFromTrackerResponse {

@@ -6,12 +6,12 @@ use crate::torrent::data::{
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Client {
-    pub peer_id: String,
+    pub peer_id: Vec<u8>,
     pub info_hash: Vec<u8>,
 
     pub data_of_download: DataOfDownload,
     pub torrent_file: TorrentFileData,
-    pub tracker_response: TrackerResponseData, //deberia ser un Option<>
+    pub tracker_response: Option<TrackerResponseData>,
     pub list_of_peers_data_for_communication: Option<Vec<PeerDataForP2PCommunication>>,
 }
 

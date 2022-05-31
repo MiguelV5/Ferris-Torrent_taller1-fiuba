@@ -274,7 +274,7 @@ fn encode_port(listen_port: u32) -> Vec<u8> {
 fn encode_handshake(
     protocol_str: String,
     info_hash: Vec<u8>,
-    peer_id: String,
+    peer_id: Vec<u8>,
 ) -> Result<Vec<u8>, P2PMessageEncodingError> {
     if protocol_str != PSTR_STRING_HANDSHAKE {
         return Err(P2PMessageEncodingError::InvalidProtocolStrError(
@@ -299,8 +299,8 @@ fn encode_handshake(
         .for_each(|byte| encoded_handshake.push(*byte));
 
     peer_id
-        .bytes()
-        .for_each(|byte| encoded_handshake.push(byte));
+        .iter()
+        .for_each(|byte| encoded_handshake.push(*byte));
 
     Ok(encoded_handshake)
 }
@@ -632,8 +632,7 @@ mod tests_p2p_encoder {
         #[test]
         fn encode_handshake_ok() {
             let mut sha1d_info_hash = vec![1; 20];
-            let mut peer_id_as_bytes: Vec<u8> = "-FA0001-012345678901".bytes().collect();
-            let peer_id = String::from_utf8(peer_id_as_bytes.clone()).unwrap();
+            let mut peer_id: Vec<u8> = "-FA0001-012345678901".bytes().collect();
             let msg_to_send = P2PMessage::Handshake {
                 protocol_str: PSTR_STRING_HANDSHAKE.to_owned(),
                 info_hash: sha1d_info_hash.clone(),
@@ -646,7 +645,7 @@ mod tests_p2p_encoder {
                 .for_each(|byte| expected_bytes.push(byte));
             [0u8; 8].iter().for_each(|byte| expected_bytes.push(*byte));
             expected_bytes.append(&mut sha1d_info_hash);
-            expected_bytes.append(&mut peer_id_as_bytes);
+            expected_bytes.append(&mut peer_id);
 
             assert_eq!(Ok(expected_bytes), to_bytes(msg_to_send));
         }

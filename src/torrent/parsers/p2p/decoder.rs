@@ -59,9 +59,7 @@ fn try_decode_handshake_p2p_message(bytes: &[u8]) -> Result<P2PMessage, P2PMessa
         P2PMessageDecodingError::FromBytesToString(format!("[P2PMessageDecodingError] {:?}", err))
     })?;
     let info_hash = bytes[28..48].to_vec();
-    let peer_id = String::from_utf8(bytes[48..68].to_vec()).map_err(|err| {
-        P2PMessageDecodingError::FromBytesToString(format!("[P2PMessageDecodingError] {:?}", err))
-    })?;
+    let peer_id = bytes[48..68].to_vec();
     Ok(P2PMessage::Handshake {
         protocol_str,
         info_hash,
@@ -461,7 +459,7 @@ mod tests_p2p_decoder {
                 Ok(P2PMessage::Handshake {
                     protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
                     info_hash: [1; 20].to_vec(),
-                    peer_id: "-FA0001-012345678901".to_string()
+                    peer_id: "-FA0001-012345678901".bytes().collect(),
                 }),
                 from_bytes(&p2p_msg_bytes)
             );

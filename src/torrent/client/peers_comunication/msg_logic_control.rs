@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 use crate::torrent::data::peer_data_for_communication::PeerDataForP2PCommunication;
-use crate::torrent::data::tracker_response_data::PeerDataFromTrackerResponse;
 use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
 use crate::torrent::parsers::p2p::message::PieceStatus;
 use crate::torrent::{client::client_struct::*, parsers::p2p::message::P2PMessage};
@@ -22,6 +21,8 @@ pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
 pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
 pub const DEFAULT_INFO_HASH: [u8; 20] = [0; 20];
 
+pub const BLOCK_BYTES: u32 = 16384; //2^14 bytes
+
 /*
  * Falta:
  * - Ver los test que tienen accesos a estructura y devuelven Ok
@@ -38,7 +39,7 @@ pub enum MsgLogicControlError {
     ReceivingMessage(String),
     SendingMessage(String),
     UpdatingPieceStatus(String),
-    Testing(String), //no me parece del todo bueno pero no encontre otra forma para levantar errores en test.
+    StoringBlock(String),
 }
 
 impl fmt::Display for MsgLogicControlError {
@@ -50,38 +51,47 @@ impl fmt::Display for MsgLogicControlError {
 impl Error for MsgLogicControlError {}
 
 //CONNECTION
-fn start_connection_with_a_peers(
-    peer_list: &[PeerDataFromTrackerResponse],
+fn start_connection_with_a_peer(
+    client_peer: &Client,
     server_peer_index: usize,
 ) -> Result<TcpStream, MsgLogicControlError> {
-    let peer_data = match peer_list.get(server_peer_index) {
-        Some(peer_data) => peer_data,
-        None => {
-            return Err(MsgLogicControlError::ConectingWithPeer(String::from(
-                "[MsgLogicControlError] Couldn`t find a server peer on the given index.",
-            )))
-        }
-    };
-    let stream = TcpStream::connect(&peer_data.peer_address)
-        .map_err(|error| MsgLogicControlError::ConectingWithPeer(format!("{:?}", error)))?;
-    Ok(stream)
+    if let Some(tracker_response) = &client_peer.tracker_response {
+        let peer_data = match tracker_response.peers.get(server_peer_index) {
+            Some(peer_data) => peer_data,
+            None => {
+                return Err(MsgLogicControlError::ConectingWithPeer(String::from(
+                    "[MsgLogicControlError] Couldn`t find a server peer on the given index.",
+                )))
+            }
+        };
+        let stream = TcpStream::connect(&peer_data.peer_address)
+            .map_err(|error| MsgLogicControlError::ConectingWithPeer(format!("{:?}", error)))?;
+        return Ok(stream);
+    }
+    Err(MsgLogicControlError::ConectingWithPeer(String::from(
+        "[MsgLogicControlError] Client peer doesn`t have a tracker response.",
+    )))
 }
 
 //HANDSHAKE
 fn has_expected_peer_id(
     client_peer: &mut Client,
-    server_peer_id: &str,
+    server_peer_id: &[u8],
     server_peer_index: usize,
 ) -> bool {
-    match client_peer.tracker_response.peers.get(server_peer_index) {
-        Some(tracker_response_peer_data) => {
-            if let Some(tracker_response_peer_id) = &tracker_response_peer_data.peer_id {
-                tracker_response_peer_id == server_peer_id
-            } else {
-                true
+    if let Some(tracker_response) = &client_peer.tracker_response {
+        match tracker_response.peers.get(server_peer_index) {
+            Some(tracker_response_peer_data) => {
+                if let Some(tracker_response_peer_id) = &tracker_response_peer_data.peer_id {
+                    tracker_response_peer_id == server_peer_id
+                } else {
+                    true
+                }
             }
+            None => false,
         }
-        None => false,
+    } else {
+        false
     }
 }
 
@@ -89,11 +99,11 @@ fn check_handshake(
     client_peer: &mut Client,
     server_protocol_str: String,
     server_info_hash: Vec<u8>,
-    server_peer_id: &str,
+    server_peer_id: &[u8],
     server_peer_index: usize,
 ) -> Result<(), MsgLogicControlError> {
     if (server_protocol_str != PSTR_STRING_HANDSHAKE)
-        || (server_info_hash != client_peer.info_hash)
+        || (server_info_hash != client_peer.torrent_file.info_hash)
         || !has_expected_peer_id(client_peer, server_peer_id, server_peer_index)
     {
         return Err(MsgLogicControlError::CheckingAndSavingHandshake(
@@ -104,7 +114,7 @@ fn check_handshake(
     Ok(())
 }
 
-fn save_handshake_data(client_peer: &mut Client, server_peer_id: String) {
+fn save_handshake_data(client_peer: &mut Client, server_peer_id: Vec<u8>) {
     let new_peer = PeerDataForP2PCommunication {
         pieces_availability: None,
         peer_id: server_peer_id,
@@ -220,57 +230,6 @@ fn update_peer_bitfield(
     }
 }
 
-//LOOK FOR PIECES INDEX
-fn server_peer_has_a_valid_and_available_piece_on_position(
-    client_peer: &Client,
-    server_peer_index: usize,
-    position: usize,
-) -> bool {
-    if let Some(list_of_peers_data_for_communication) =
-        &client_peer.list_of_peers_data_for_communication
-    {
-        if let Some(server_peer_data) = list_of_peers_data_for_communication.get(server_peer_index)
-        {
-            if let Some(pieces_availability) = &server_peer_data.pieces_availability {
-                return pieces_availability[position] == PieceStatus::ValidAndAvailablePiece;
-            }
-        }
-    }
-
-    false
-}
-
-fn look_for_a_missing_piece_index(client_peer: &Client, server_peer_index: usize) -> Option<usize> {
-    for (piece_index, _piece_status) in client_peer
-        .data_of_download
-        .pieces_availability
-        .iter()
-        .filter(|piece_status| **piece_status == PieceStatus::MissingPiece)
-        .enumerate()
-    {
-        if server_peer_has_a_valid_and_available_piece_on_position(
-            client_peer,
-            server_peer_index,
-            piece_index,
-        ) {
-            return Some(piece_index);
-        }
-    }
-
-    None
-}
-
-fn look_for_beggining_byte_index(client_peer: &Client, piece_index: u32) -> Option<u32> {
-    if let Some(PieceStatus::PartiallyDownloaded { downloaded_bytes }) = client_peer
-        .data_of_download
-        .pieces_availability
-        .get(piece_index as usize)
-    {
-        return Some(*downloaded_bytes);
-    }
-    None
-}
-
 // UPDATING FIELDS
 fn update_am_interested_field(client_peer: &mut Client, server_peer_index: usize, new_value: bool) {
     if let Some(list_of_peers_data_for_communication) =
@@ -365,7 +324,51 @@ fn update_server_peer_piece_status(
     ))
 }
 
-fn react_according_to_the_received_msg(
+//PIECE
+fn check_store_block(
+    client_peer: &Client,
+    _piece_index: u32,
+    beginning_byte_index: u32,
+    block: &[u8],
+) -> Result<(), MsgLogicControlError> {
+    let amount_of_bytes = calculate_amount_of_bytes(client_peer, beginning_byte_index)?
+        .try_into()
+        .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
+    if block.len() != amount_of_bytes {
+        return Err(MsgLogicControlError::StoringBlock(
+            "[MsgLogicControlError] Block length is not as expected".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn store_block(
+    client_peer: &mut Client,
+    _piece_index: u32,
+    beginning_byte_index: u32,
+    block: Vec<u8>,
+) -> Result<(), MsgLogicControlError> {
+    //CHEQUEO LONGITUD DEL BLOQUE
+    let amount_of_bytes = calculate_amount_of_bytes(client_peer, beginning_byte_index)?
+        .try_into()
+        .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
+    if block.len() != amount_of_bytes {
+        return Err(MsgLogicControlError::StoringBlock(
+            "[MsgLogicControlError] Block length is not as expected".to_string(),
+        ));
+    }
+
+    //CHEQUEO QUE EL PIECE INDEX SEA VALIDO
+
+    //GUARDO PIEZA
+
+    //CAMBIO ESTADO DE PIEZA
+
+    Ok(())
+}
+
+//UPDATE INFORMATION
+fn update_information_according_to_the_received_msg(
     client_peer: &mut Client,
     server_peer_index: usize,
     received_msg: P2PMessage,
@@ -411,11 +414,11 @@ fn react_according_to_the_received_msg(
             Ok(())
         }
         P2PMessage::Piece {
-            piece_index: _,
-            beginning_byte_index: _,
-            block: _,
+            piece_index,
+            beginning_byte_index,
+            block,
         } => {
-            //save_block()
+            store_block(client_peer, piece_index, beginning_byte_index, block)?;
             // Miguel: [NOTA PARA DESPUES CUANDO SE NECESITE USAR THREADS] Lo que se me ocurre acá para cuando se vaya a guardar el archivo COMPLETO es que hagas una funcion en un archivo nuevo en el directorio data que sea tipo piece_collector.rs ponele; que lo que hace es ir recibiendo las piezas (completas) por un channel (o tambien se podria directamente retornar la pieza completa desde la funcion principal de este archivo en vez de  un Ok(()), y que en la funcion del handle.rs q se vayan acumulando piezas para despues llamar al collector y que vaya escribiendo el archivo). Tambien para despues, habrá que ver como adaptar la funcion principal de este archivo para que NO reciba un &mut al client, sino capaz un Arc<Mutex<Client>>
             //
             // Miguel: [NOTA PARA AHORA (ENTREGA PARCIAL)] Como solo nos piden tener una pieza, creo que lo que se busca es que se escriba esa sola piezita en un archivo para despues poder aplicarle el comando sumsha1 de linux y comparar con el valor sha1 del info_hash que viene del tracker. Entonces podrias ver de retornar la pieza en la funcion principal de ESTE archivo para asi poder pasarsela al collector para que por ahora escriba esa sola pieza como un archivito "completo" y listo.
@@ -438,6 +441,80 @@ fn react_according_to_the_received_msg(
     Ok(())
 }
 
+//LOOK FOR PIECES
+fn server_peer_has_a_valid_and_available_piece_on_position(
+    client_peer: &Client,
+    server_peer_index: usize,
+    position: usize,
+) -> bool {
+    if let Some(list_of_peers_data_for_communication) =
+        &client_peer.list_of_peers_data_for_communication
+    {
+        if let Some(server_peer_data) = list_of_peers_data_for_communication.get(server_peer_index)
+        {
+            if let Some(pieces_availability) = &server_peer_data.pieces_availability {
+                return pieces_availability[position] == PieceStatus::ValidAndAvailablePiece;
+            }
+        }
+    }
+
+    false
+}
+
+fn look_for_a_missing_piece_index(client_peer: &Client, server_peer_index: usize) -> Option<usize> {
+    for (piece_index, _piece_status) in client_peer
+        .data_of_download
+        .pieces_availability
+        .iter()
+        .filter(|piece_status| **piece_status != PieceStatus::ValidAndAvailablePiece)
+        .enumerate()
+    {
+        if server_peer_has_a_valid_and_available_piece_on_position(
+            client_peer,
+            server_peer_index,
+            piece_index,
+        ) {
+            return Some(piece_index);
+        }
+    }
+
+    None
+}
+
+fn calculate_beginning_byte_index(
+    client_peer: &Client,
+    piece_index: u32,
+) -> Result<u32, MsgLogicControlError> {
+    match client_peer
+        .data_of_download
+        .pieces_availability
+        .get(piece_index as usize)
+    {
+        Some(PieceStatus::PartiallyDownloaded { downloaded_bytes }) => Ok(*downloaded_bytes),
+        Some(PieceStatus::MissingPiece) => Ok(0),
+        _ => Err(MsgLogicControlError::LookingForPieces(
+            "[MsgLogicControlError] Invalid piece index given in order to calculate beggining byte index."
+                .to_string(),
+        )),
+    }
+}
+
+fn calculate_amount_of_bytes(
+    client_peer: &Client,
+    beginning_byte_index: u32,
+) -> Result<u32, MsgLogicControlError> {
+    //habria que considerar que el ultimo bloque de cada pieza capaz es mas chico
+    let piece_lenght = u32::try_from(client_peer.torrent_file.piece_length)
+        .map_err(|err| MsgLogicControlError::LookingForPieces(format!("{:?}", err)))?;
+    let remaining_bytes = piece_lenght - beginning_byte_index;
+
+    if remaining_bytes <= BLOCK_BYTES {
+        Ok(remaining_bytes)
+    } else {
+        Ok(BLOCK_BYTES)
+    }
+}
+
 fn look_for_pieces(
     client_peer: &mut Client,
     server_peer_index: usize,
@@ -456,7 +533,7 @@ fn look_for_pieces(
         }
     };
 
-    //se podria modularizar eso
+    //se podria modularizar eso:
 
     //SI ESTOY CHOKE -> LE MANDO QUE ESTOY INTERESADO EN UNA PIEZA
     //SI NO ESTOY CHOKE -> LE MANDO UN REQUEST PARA UNA DE SUS PIEZAS
@@ -464,14 +541,8 @@ fn look_for_pieces(
         send_interested(client_stream)
             .map_err(|err| MsgLogicControlError::SendingMessage(format!("{:?}", err)))?;
     } else {
-        let beginning_byte_index =
-            look_for_beggining_byte_index(&*client_peer, piece_index).unwrap_or(0);
-        //cambio por clippy
-        // let beginning_byte_index = match look_for_beggining_byte_index(&*client_peer, piece_index) {
-        //     Some(beginning_byte_index) => beginning_byte_index,
-        //     None => 0, //devolver error
-        // };
-        let amount_of_bytes = 4; //habria que ver de que manera calcular esto segun los bytes que faltan y bla
+        let beginning_byte_index = calculate_beginning_byte_index(client_peer, piece_index)?;
+        let amount_of_bytes = calculate_amount_of_bytes(client_peer, beginning_byte_index)?;
         send_request(
             client_stream,
             piece_index,
@@ -488,15 +559,13 @@ fn look_for_pieces(
 //
 //
 //
-// (Miguel: Creo que el "full" sobra pero lo deje por las dudas, se puede quitar si se quiere)
 // FUNCION PRINCIPAL
-pub fn full_interaction_with_single_peer(
+pub fn interact_with_single_peer(
     client_peer: &mut Client,
     server_peer_index: usize,
 ) -> Result<(), MsgLogicControlError> {
     //CONEXION CON UN PEER
-    let mut client_stream =
-        start_connection_with_a_peers(&client_peer.tracker_response.peers, server_peer_index)?;
+    let mut client_stream = start_connection_with_a_peer(&*client_peer, server_peer_index)?;
 
     //ENVIO HANDSHAKE
     send_handshake(client_peer, &mut client_stream)
@@ -512,10 +581,14 @@ pub fn full_interaction_with_single_peer(
         let received_msg = receive_message(&mut client_stream)
             .map_err(|error| MsgLogicControlError::ReceivingMessage(format!("{:?}", error)))?;
 
-        //REALIZO ACCION SEGUN MENSAJE
-        react_according_to_the_received_msg(client_peer, server_peer_index, received_msg)?;
+        //ACTUALIZO MI INFORMACION SEGUN MENSAJE
+        update_information_according_to_the_received_msg(
+            client_peer,
+            server_peer_index,
+            received_msg,
+        )?;
 
-        //BUSCO SI TIENE UNA PIEZA QUE ME INTERESE
+        //BUSCO SI TIENE UNA PIEZA QUE ME INTERESE Y ENVIO MENSAJE
         look_for_pieces(client_peer, server_peer_index, &mut client_stream)?;
         if !am_interested(client_peer, server_peer_index) {
             return Ok(());
@@ -538,9 +611,22 @@ mod test_msg_logic_control {
     use std::net::SocketAddr;
     use std::str::FromStr;
 
+    #[derive(PartialEq, Debug, Clone)]
+    pub enum TestingError {
+        ClientPeerFieldsInvalidAccess(String),
+    }
+
+    impl fmt::Display for TestingError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{:?}", self)
+        }
+    }
+
+    impl Error for TestingError {}
+
     fn create_default_client_peer_with_no_server_peers() -> Result<Client, Box<dyn Error>> {
         let server_peer = PeerDataFromTrackerResponse {
-            peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
+            peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
             peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
         };
 
@@ -570,11 +656,11 @@ mod test_msg_logic_control {
             total_size: 16,
         };
         Ok(Client {
-            peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+            peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
             data_of_download,
             torrent_file,
-            tracker_response,
+            tracker_response: Some(tracker_response),
             list_of_peers_data_for_communication: None,
         })
     }
@@ -582,7 +668,7 @@ mod test_msg_logic_control {
     fn create_default_client_peer_with_a_server_peer_that_has_just_one_valid_piece(
     ) -> Result<Client, Box<dyn Error>> {
         let server_peer = PeerDataFromTrackerResponse {
-            peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
+            peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
             peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
         };
         let tracker_response = TrackerResponseData {
@@ -611,7 +697,7 @@ mod test_msg_logic_control {
             total_size: 32,
         };
         let server_peer_data = PeerDataForP2PCommunication {
-            peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+            peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
             pieces_availability: Some(vec![
                 PieceStatus::MissingPiece,
                 PieceStatus::ValidAndAvailablePiece,
@@ -622,11 +708,11 @@ mod test_msg_logic_control {
         };
         let list_of_peers_data_for_communication = Some(vec![server_peer_data]);
         Ok(Client {
-            peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+            peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
             data_of_download,
             torrent_file,
-            tracker_response,
+            tracker_response: Some(tracker_response),
             list_of_peers_data_for_communication,
         })
     }
@@ -634,7 +720,7 @@ mod test_msg_logic_control {
     fn create_default_client_peer_with_a_server_peer_that_has_no_valid_pieces(
     ) -> Result<Client, Box<dyn Error>> {
         let server_peer = PeerDataFromTrackerResponse {
-            peer_id: Some(DEFAULT_SERVER_PEER_ID.to_string()),
+            peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
             peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
         };
         let tracker_response = TrackerResponseData {
@@ -663,7 +749,7 @@ mod test_msg_logic_control {
             total_size: 32,
         };
         let server_peer_data = PeerDataForP2PCommunication {
-            peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+            peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
             pieces_availability: Some(vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece]),
             am_interested: false,
             am_choking: true,
@@ -671,11 +757,11 @@ mod test_msg_logic_control {
         };
         let list_of_peers_data_for_communication = Some(vec![server_peer_data]);
         Ok(Client {
-            peer_id: DEFAULT_CLIENT_PEER_ID.to_string(),
+            peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
             data_of_download,
             torrent_file,
-            tracker_response,
+            tracker_response: Some(tracker_response),
             list_of_peers_data_for_communication,
         })
     }
@@ -705,7 +791,7 @@ mod test_msg_logic_control {
             let message = P2PMessage::Handshake {
                 protocol_str: "VitTorrent protocol".to_string(),
                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
             };
 
             assert!(
@@ -723,7 +809,7 @@ mod test_msg_logic_control {
             let message = P2PMessage::Handshake {
                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
                 info_hash: [1; 20].to_vec(),
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
             };
 
             assert!(
@@ -741,7 +827,7 @@ mod test_msg_logic_control {
             let message = P2PMessage::Handshake {
                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-                peer_id: "-FA0001-000000000002".to_string(),
+                peer_id: "-FA0001-000000000002".bytes().collect(),
             };
 
             assert!(
@@ -759,19 +845,21 @@ mod test_msg_logic_control {
 
             let mut client_peer = create_default_client_peer_with_no_server_peers()?;
             //MODIFICO EL CLIENTE PARA QUE NO TENGA LOS PEER_ID DE LOS SERVER PEER
-            client_peer.tracker_response.peers = vec![PeerDataFromTrackerResponse {
-                peer_id: None,
-                peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
-            }];
+            if let Some(tracker_response) = &mut client_peer.tracker_response {
+                tracker_response.peers = vec![PeerDataFromTrackerResponse {
+                    peer_id: None,
+                    peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
+                }];
+            }
 
             let message = P2PMessage::Handshake {
                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
             };
             let expected_peer_data = PeerDataForP2PCommunication {
                 pieces_availability: None,
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
                 am_interested: false,
                 am_choking: true,
                 peer_choking: true,
@@ -785,7 +873,7 @@ mod test_msg_logic_control {
                 return Ok(());
             }
 
-            Err(Box::new(MsgLogicControlError::Testing(
+            Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
                 "Couldn`t access to client peer fields.".to_string(),
             )))
         }
@@ -798,11 +886,11 @@ mod test_msg_logic_control {
             let message = P2PMessage::Handshake {
                 protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
                 info_hash: DEFAULT_INFO_HASH.to_vec(),
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
             };
             let expected_peer_data = PeerDataForP2PCommunication {
                 pieces_availability: None,
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
                 am_interested: false,
                 am_choking: true,
                 peer_choking: true,
@@ -815,7 +903,7 @@ mod test_msg_logic_control {
                 assert_eq!(1, peer_data_list.len());
                 return Ok(());
             }
-            Err(Box::new(MsgLogicControlError::Testing(
+            Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
                 "Couldn`t access to client peer fields.".to_string(),
             )))
         }
@@ -831,7 +919,7 @@ mod test_msg_logic_control {
             let bitfield = vec![];
 
             let peer_data = PeerDataForP2PCommunication {
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
                 pieces_availability: None,
                 am_interested: false,
                 am_choking: true,
@@ -849,7 +937,7 @@ mod test_msg_logic_control {
                 }
             }
 
-            Err(Box::new(MsgLogicControlError::Testing(
+            Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
                 "Couldn`t access to client peer fields.".to_string(),
             )))
         }
@@ -868,7 +956,7 @@ mod test_msg_logic_control {
 
             let peer_data = PeerDataForP2PCommunication {
                 pieces_availability: None,
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
                 am_interested: false,
                 am_choking: true,
                 peer_choking: true,
@@ -885,7 +973,7 @@ mod test_msg_logic_control {
                 }
             }
 
-            Err(Box::new(MsgLogicControlError::Testing(
+            Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
                 "Couldn`t access to client peer fields.".to_string(),
             )))
         }
@@ -899,7 +987,7 @@ mod test_msg_logic_control {
 
             let peer_data = PeerDataForP2PCommunication {
                 pieces_availability: None,
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
                 am_interested: false,
                 am_choking: true,
                 peer_choking: true,
@@ -920,7 +1008,7 @@ mod test_msg_logic_control {
                     return Ok(());
                 }
             }
-            Err(Box::new(MsgLogicControlError::Testing(
+            Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
                 "Couldn`t access to client peer fields.".to_string(),
             )))
         }
@@ -939,7 +1027,7 @@ mod test_msg_logic_control {
 
             let peer_data = PeerDataForP2PCommunication {
                 pieces_availability: None,
-                peer_id: DEFAULT_SERVER_PEER_ID.to_string(),
+                peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
                 am_interested: false,
                 am_choking: true,
                 peer_choking: true,
@@ -960,7 +1048,7 @@ mod test_msg_logic_control {
                     }
                 }
             }
-            Err(Box::new(MsgLogicControlError::Testing(
+            Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
                 "Couldn`t access to client peer fields.".to_string(),
             )))
         }
@@ -1031,7 +1119,7 @@ mod test_msg_logic_control {
                 }
             }
 
-            Err(Box::new(MsgLogicControlError::Testing(
+            Err(Box::new(TestingError::ClientPeerFieldsInvalidAccess(
                 "Couldn`t access to client peer fields.".to_string(),
             )))
         }
