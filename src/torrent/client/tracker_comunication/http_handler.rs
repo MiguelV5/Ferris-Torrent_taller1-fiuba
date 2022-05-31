@@ -331,7 +331,8 @@ impl HttpHandler {
         let mut connector = self.connect()?;
 
         let get_msg = self.get_send_msg()?;
-        println!("Mensaje enviado: {}", get_msg);
+        println!();
+        println!("\n[{}]", get_msg);
         if connector.write_all(get_msg.as_bytes()).is_err() {
             return Err(ErrorMsgHttp::SendingGetMessage);
         };
@@ -340,10 +341,10 @@ impl HttpHandler {
         if connector.read_to_end(&mut response_tracker).is_err() {
             return Err(ErrorMsgHttp::ReadingResponse);
         }
-        //println!(
-        //    "Respuesta del tracker: {:?}",
-        //    String::from_utf8_lossy(&response_tracker.clone())
-        //);
+        println!(
+            "\nResponse:\n[{:?}]",
+            String::from_utf8_lossy(&response_tracker.clone())
+        );
         self.tracker_response_to_dic(response_tracker)
     }
 }

@@ -1,20 +1,21 @@
 use std::env;
-use std::error::Error;
 
-use fa_torrent::start_torrent_process;
+use fa_torrent::torrent::client::client_struct::Client;
+
 mod torrent;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     println!("Iniciando el programa...");
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         eprintln!("Error de la aplicación");
-        return Err("Esperando un path".into());
     }
-    if let Err(err) = start_torrent_process(args[1].as_str()) {
-        eprintln!("Error de la aplicación: {}", err);
-        return Err(err);
+    let mut client_struct = match Client::new(args[1].as_str()) {
+        Ok(client) => client,
+        Err(error) => return println!("Error de la aplicación: {:?}", error),
     };
-
-    Ok(())
+    match client_struct.init_communication() {
+        Ok(_) => (),
+        Err(error) => return println!("Error de la aplicación: {:?}", error),
+    }
 }
