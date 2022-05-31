@@ -526,7 +526,6 @@ pub fn full_interaction_with_single_peer(
 #[cfg(test)]
 mod test_msg_logic_control {
     use super::*;
-    use std::collections::HashMap;
     use std::error::Error;
 
     use crate::torrent::data::data_of_download::{DataOfDownload, StateOfDownload};
@@ -547,7 +546,6 @@ mod test_msg_logic_control {
 
         let tracker_response = TrackerResponseData {
             interval: 0,
-            tracker_id: DEFAULT_TRACKER_ID.to_string(),
             complete: 1,
             incomplete: 0,
             peers: vec![server_peer],
@@ -560,9 +558,12 @@ mod test_msg_logic_control {
             pieces_availability: vec![PieceStatus::MissingPiece],
         };
         let torrent_file = TorrentFileData {
+            is_single_file: true,
+            name: "resulting_filename.test".to_string(),
+            pieces: vec![],
+            path: vec![],
             url_tracker_main: "tracker_main.com".to_string(),
             url_tracker_list: vec![],
-            info: HashMap::new(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
             piece_length: 16,
             total_amount_pieces: 1,
@@ -586,7 +587,6 @@ mod test_msg_logic_control {
         };
         let tracker_response = TrackerResponseData {
             interval: 0,
-            tracker_id: DEFAULT_TRACKER_ID.to_string(),
             complete: 1,
             incomplete: 0,
             peers: vec![server_peer],
@@ -599,9 +599,12 @@ mod test_msg_logic_control {
             pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
         };
         let torrent_file = TorrentFileData {
+            is_single_file: true,
+            name: "resulting_filename.test".to_string(),
+            pieces: vec![],
+            path: vec![],
             url_tracker_main: "tracker_main.com".to_string(),
             url_tracker_list: vec![],
-            info: HashMap::new(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
             piece_length: 16,
             total_amount_pieces: 2,
@@ -636,7 +639,6 @@ mod test_msg_logic_control {
         };
         let tracker_response = TrackerResponseData {
             interval: 0,
-            tracker_id: DEFAULT_TRACKER_ID.to_string(),
             complete: 0,
             incomplete: 1,
             peers: vec![server_peer],
@@ -649,9 +651,12 @@ mod test_msg_logic_control {
             pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
         };
         let torrent_file = TorrentFileData {
+            is_single_file: true,
+            name: "resulting_filename.test".to_string(),
+            pieces: vec![],
+            path: vec![],
             url_tracker_main: "tracker_main.com".to_string(),
             url_tracker_list: vec![],
-            info: HashMap::new(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
             piece_length: 16,
             total_amount_pieces: 2,

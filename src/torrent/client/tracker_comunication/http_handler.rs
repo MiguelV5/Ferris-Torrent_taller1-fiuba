@@ -4,8 +4,9 @@ extern crate sha1;
 use native_tls::{TlsConnector, TlsStream};
 
 use crate::torrent::data::torrent_file_data::TorrentFileData;
-use crate::torrent::parsers::bencoding::decoder::to_dic;
+use crate::torrent::parsers::bencoding;
 use crate::torrent::parsers::bencoding::values::ValuesBencoding;
+use crate::torrent::parsers::url_encoder;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -33,6 +34,7 @@ const IP: &str = "&ip=";
 const PORT: &str = "&port=";
 const UPLOADED: &str = "&uploaded=";
 const DOWNLOADED: &str = "&downloaded=";
+//const COMPACT: &str = "&compact=";
 const LEFT: &str = "&left=";
 const EVENT: &str = "&event=";
 const HTTP: &str = " HTTP/1.0\r\n";
@@ -71,6 +73,7 @@ struct MsgDescriptor {
     uploaded: u64,
     downloaded: u64,
     left: u64,
+    //compact: u8,
     event: String,
     host: String,
 }
@@ -81,6 +84,11 @@ fn vec_u8_to_string(vec: &[u8]) -> String {
 
 fn find_index_msg(response: &[u8], size: usize, end_line: &[u8]) -> Option<usize> {
     response.windows(size).position(|arr| arr == end_line)
+}
+
+fn init_info_hash(vec_sha1: Vec<u8>) -> String {
+    let info_hash = url_encoder::from_string(vec_sha1);
+    vec_u8_to_string(&info_hash)
 }
 
 //Paso url del tracker al formato que necesito de host.
@@ -111,9 +119,14 @@ fn init_host(tracker: String) -> ResultMsg<String> {
     }
 }
 
+fn add_description_msg(msg: &mut String, type_msg: &str, value: String) {
+    msg.push_str(type_msg);
+    msg.push_str(&value);
+}
+
 impl MsgDescriptor {
     pub fn new(torrent: TorrentFileData, id: String) -> ResultMsg<Self> {
-        let info_hash = vec_u8_to_string(&torrent.get_info_hash());
+        let info_hash = init_info_hash(torrent.get_info_hash());
         //Cuando este el generador de Peer_Id se lo podria pasar por parametro e ingresarlo aca
         let peer_id = id;
         let ip = String::from("127.0.0.1");
@@ -122,13 +135,15 @@ impl MsgDescriptor {
         let downloaded = 0;
         let left = torrent.get_total_size() as u64;
         let event = String::from("started");
-        let host = init_host(torrent.url_tracker_main)?;
+        let host = init_host(torrent.get_tracker_main())?;
+        //let compact = 0;
 
         Ok(MsgDescriptor {
             info_hash,
             peer_id,
             ip,
             port,
+            //compact,
             uploaded,
             downloaded,
             left,
@@ -161,6 +176,10 @@ impl MsgDescriptor {
         self.downloaded.to_string()
     }
 
+    //pub fn get_compact(&self) -> String {
+    //    self.compact.to_string()
+    //}
+
     pub fn get_left(&self) -> String {
         self.left.to_string()
     }
@@ -191,15 +210,27 @@ impl MsgDescriptor {
         self.uploaded += more_up;
         self.left -= more_down;
     }
+
+    pub fn get_send_msg(&self) -> ResultMsg<String> {
+        let mut result = String::from(INIT_MSG);
+        add_description_msg(&mut result, INFO_HASH, self.get_info_hash());
+        add_description_msg(&mut result, PEER_ID, self.get_peer_id());
+        add_description_msg(&mut result, IP, self.get_ip());
+        //add_description_msg(&mut result, COMPACT, self.get_compact());
+        add_description_msg(&mut result, PORT, self.get_port());
+        add_description_msg(&mut result, UPLOADED, self.get_uploaded());
+        add_description_msg(&mut result, DOWNLOADED, self.get_downloaded());
+        add_description_msg(&mut result, LEFT, self.get_left());
+        add_description_msg(&mut result, EVENT, self.get_event());
+        add_description_msg(&mut result, HTTP, String::new());
+        add_description_msg(&mut result, HOST, self.get_host());
+        add_description_msg(&mut result, MSG_ENDING, String::new());
+        Ok(result)
+    }
 }
 
 pub struct HttpHandler {
     msg_get: MsgDescriptor,
-}
-
-fn add_description_msg(msg: &mut String, type_msg: &str, value: String) {
-    msg.push_str(type_msg);
-    msg.push_str(&value);
 }
 
 impl HttpHandler {
@@ -214,19 +245,7 @@ impl HttpHandler {
     }
 
     pub fn get_send_msg(&self) -> ResultMsg<String> {
-        let mut result = String::from(INIT_MSG);
-        add_description_msg(&mut result, INFO_HASH, self.msg_get.get_info_hash());
-        add_description_msg(&mut result, PEER_ID, self.msg_get.get_peer_id());
-        add_description_msg(&mut result, IP, self.msg_get.get_ip());
-        add_description_msg(&mut result, PORT, self.msg_get.get_port());
-        add_description_msg(&mut result, UPLOADED, self.msg_get.get_uploaded());
-        add_description_msg(&mut result, DOWNLOADED, self.msg_get.get_downloaded());
-        add_description_msg(&mut result, LEFT, self.msg_get.get_left());
-        add_description_msg(&mut result, EVENT, self.msg_get.get_event());
-        add_description_msg(&mut result, HTTP, String::new());
-        add_description_msg(&mut result, HOST, self.msg_get.get_host());
-        add_description_msg(&mut result, MSG_ENDING, String::new());
-        Ok(result)
+        self.msg_get.get_send_msg()
     }
 
     pub fn update_download_stats(&mut self, more_down: u64, more_up: u64) {
@@ -297,7 +316,8 @@ impl HttpHandler {
         match find_index_msg(&response, FOUR, DOUBLE_END_LINE) {
             Some(pos) => {
                 let bencode_response = response[(pos + FOUR)..].to_vec();
-                if let Ok((dic_response, _)) = to_dic(bencode_response) {
+                if let Ok(dic_response) = bencoding::decoder::from_torrent_to_dic(bencode_response)
+                {
                     Ok(dic_response)
                 } else {
                     Err(ErrorMsgHttp::ToDicError)
@@ -320,10 +340,10 @@ impl HttpHandler {
         if connector.read_to_end(&mut response_tracker).is_err() {
             return Err(ErrorMsgHttp::ReadingResponse);
         }
-        println!(
-            "Respuesta del tracker: {:?}",
-            String::from_utf8(response_tracker.clone())
-        );
+        //println!(
+        //    "Respuesta del tracker: {:?}",
+        //    String::from_utf8_lossy(&response_tracker.clone())
+        //);
         self.tracker_response_to_dic(response_tracker)
     }
 }
@@ -342,20 +362,20 @@ mod test {
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("MetadataError: {:?}", error),
+            Err(error) => panic!("{}", error),
         };
 
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("ErrorTorrent: {:?}", error),
+            Err(error) => panic!("{}", error),
         };
 
         let http_handler =
             match HttpHandler::new(torrent.clone(), "ABCDEFGHIJKLMNOPQRST".to_string()) {
                 Ok(handler) => handler,
-                Err(error) => panic!("ErrorMsgHttp: {:?}", error),
+                Err(error) => panic!("{}", error),
             };
-        let info_hash = vec_u8_to_string(&torrent.get_info_hash());
+        let info_hash = init_info_hash(torrent.get_info_hash());
 
         let mut msg_get_expected = String::from("GET /announce");
         msg_get_expected.push_str("?info_hash=");
@@ -373,18 +393,18 @@ mod test {
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("MetadataError: {:?}", error),
+            Err(error) => panic!("{}", error),
         };
 
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("ErrorTorrent: {:?}", error),
+            Err(error) => panic!("{}", error),
         };
 
         let http_handler =
             match HttpHandler::new(torrent.clone(), "ABCDEFGHIJKLMNOPQRST".to_string()) {
                 Ok(handler) => handler,
-                Err(error) => panic!("ErrorMsgHttp: {:?}", error),
+                Err(error) => panic!("{}", error),
             };
 
         let response = http_handler.check_http_code("HTTP/1.1 200 OK".as_bytes());

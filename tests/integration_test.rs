@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+//use std::collections::HashMap;
 use std::error::Error;
 use std::sync::mpsc;
 
@@ -35,7 +35,7 @@ fn create_default_client_peer(peer_address: SocketAddr) -> Result<Client, Box<dy
 
     let tracker_response = TrackerResponseData {
         interval: 0,
-        tracker_id: DEFAULT_TRACKER_ID.to_string(),
+        //tracker_id: DEFAULT_TRACKER_ID.to_string(),
         complete: 1,
         incomplete: 0,
         peers: vec![server_peer],
@@ -48,11 +48,14 @@ fn create_default_client_peer(peer_address: SocketAddr) -> Result<Client, Box<dy
         pieces_availability: vec![PieceStatus::MissingPiece],
     };
     let torrent_file = TorrentFileData {
+        is_single_file: true,
+        name: "nombre.txt".to_string(),
         url_tracker_main: "tracker_main.com".to_string(),
         url_tracker_list: vec![],
-        info: HashMap::new(),
         info_hash: DEFAULT_INFO_HASH.to_vec(),
+        pieces: vec![],
         piece_length: 16,
+        path: vec![],
         total_amount_pieces: 1,
         total_size: 16,
     };

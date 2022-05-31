@@ -184,13 +184,16 @@ mod test_msg_sender {
     use crate::torrent::parsers::{p2p, p2p::message::P2PMessage};
     use crate::torrent::{
         client::peers_comunication::msg_logic_control::{
-            DEFAULT_ADDR, DEFAULT_CLIENT_PEER_ID, DEFAULT_INFO_HASH, DEFAULT_SERVER_PEER_ID,
-            DEFAULT_TRACKER_ID,
+            DEFAULT_ADDR,
+            DEFAULT_CLIENT_PEER_ID,
+            DEFAULT_INFO_HASH,
+            DEFAULT_SERVER_PEER_ID,
+            //DEFAULT_TRACKER_ID,
         },
         data::peer_data_for_communication::PeerDataForP2PCommunication,
         parsers::p2p::message::PieceStatus,
     };
-    use std::collections::HashMap;
+    //use std::collections::HashMap;
     use std::error::Error;
     use std::io::Read;
     use std::net::{SocketAddr, TcpListener};
@@ -205,7 +208,7 @@ mod test_msg_sender {
         };
         let tracker_response = TrackerResponseData {
             interval: 0,
-            tracker_id: DEFAULT_TRACKER_ID.to_string(),
+            //tracker_id: DEFAULT_TRACKER_ID.to_string(),
             complete: 1,
             incomplete: 0,
             peers: vec![server_peer],
@@ -218,11 +221,14 @@ mod test_msg_sender {
             pieces_availability: vec![PieceStatus::MissingPiece],
         };
         let torrent_file = TorrentFileData {
+            is_single_file: true,
+            name: "nombre.txt".to_string(),
             url_tracker_main: "tracker_main.com".to_string(),
             url_tracker_list: vec![],
-            info: HashMap::new(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
+            pieces: vec![],
             piece_length: 16,
+            path: vec![],
             total_amount_pieces: 1,
             total_size: 16,
         };
