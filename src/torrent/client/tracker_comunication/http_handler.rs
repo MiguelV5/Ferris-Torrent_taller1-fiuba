@@ -7,6 +7,7 @@ use crate::torrent::data::torrent_file_data::TorrentFileData;
 use crate::torrent::parsers::bencoding;
 use crate::torrent::parsers::bencoding::values::ValuesBencoding;
 use crate::torrent::parsers::url_encoder;
+use log::{debug, error, trace};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -40,6 +41,10 @@ const EVENT: &str = "&event=";
 const HTTP: &str = " HTTP/1.0\r\n";
 const HOST: &str = "Host:";
 const MSG_ENDING: &str = "\r\n\r\n";
+
+const IP_CLIENT: &str = "127.0.0.1";
+const PORT_CLIENT: &str = ":443";
+const STARTED: &str = "started";
 
 #[derive(Debug, PartialEq)]
 pub enum ErrorMsgHttp {
@@ -129,12 +134,12 @@ impl MsgDescriptor {
         let info_hash = init_info_hash(torrent.get_info_hash());
         //Cuando este el generador de Peer_Id se lo podria pasar por parametro e ingresarlo aca
         let peer_id = id;
-        let ip = String::from("127.0.0.1");
+        let ip = String::from(IP_CLIENT);
         let port = 6881;
         let uploaded = 0;
         let downloaded = 0;
         let left = torrent.get_total_size() as u64;
-        let event = String::from("started");
+        let event = String::from(STARTED);
         let host = init_host(torrent.get_tracker_main())?;
         //let compact = 0;
 
@@ -259,19 +264,26 @@ impl HttpHandler {
         };
 
         let mut addr = self.get_host();
-        addr.push_str(":443");
+        addr.push_str(PORT_CLIENT);
+        debug!("Conectando TCP con addr: {}", addr);
 
         let stream = match TcpStream::connect(addr) {
             Ok(tcp_conected) => tcp_conected,
-            Err(_) => return Err(ErrorMsgHttp::ConnectTcp),
+            Err(_) => {
+                error!("Error al comunicarse con Tcp");
+                return Err(ErrorMsgHttp::ConnectTcp);
+            }
         };
 
         let domain = self.get_host();
+        debug!("Conectando TLS con domain: {}", domain);
         let connection = match connector.connect(&domain, stream) {
             Ok(tls_conected) => tls_conected,
-            Err(_) => return Err(ErrorMsgHttp::ConnectTcp),
+            Err(_) => {
+                error!("Error al comunicarse con Tls");
+                return Err(ErrorMsgHttp::ConnectTls);
+            }
         };
-        //println!("{:?}", connection);
         Ok(connection)
     }
 
@@ -331,18 +343,21 @@ impl HttpHandler {
         let mut connector = self.connect()?;
 
         let get_msg = self.get_send_msg()?;
-        println!();
-        println!("\n[{}]", get_msg);
+        trace!("Enviando request al tracker");
+        debug!("Request: [{:?}]", get_msg);
         if connector.write_all(get_msg.as_bytes()).is_err() {
+            error!("Error al escribir request al Tracker");
             return Err(ErrorMsgHttp::SendingGetMessage);
         };
 
         let mut response_tracker = vec![];
+        trace!("Recibiendo respuesta del tracker");
         if connector.read_to_end(&mut response_tracker).is_err() {
+            error!("Error al leer la respuesta del Tracker");
             return Err(ErrorMsgHttp::ReadingResponse);
         }
-        println!(
-            "\nResponse:\n[{:?}]",
+        debug!(
+            "Response: [{:?}]",
             String::from_utf8_lossy(&response_tracker.clone())
         );
         self.tracker_response_to_dic(response_tracker)

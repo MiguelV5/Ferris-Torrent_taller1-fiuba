@@ -9,6 +9,8 @@ edition = "2021"
 sha1 = "0.10.1"
 native-tls = "0.2.10"
 rand = "0.8.4"
+log = "0.4.17"
+pretty_env_logger = "0.4.0"
 
 [target.'cfg(unix)'.dependencies]
 openssl = { version = "0.10.40", features = ["vendored"] }

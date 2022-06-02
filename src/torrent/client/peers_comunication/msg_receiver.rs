@@ -83,10 +83,7 @@ pub fn receive_message(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiver
 #[cfg(test)]
 mod test_msg_receiver {
     use super::*;
-    use crate::torrent::{
-        client::peers_comunication::msg_logic_control::DEFAULT_ADDR,
-        parsers::p2p::constants::PSTR_STRING_HANDSHAKE,
-    };
+    use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
     use std::error::Error;
     use std::{io::Write, net::TcpListener};
 
@@ -171,7 +168,6 @@ mod test_msg_receiver {
         fn receive_hanshake_with_less_bytes_error() -> Result<(), Box<dyn Error>> {
             let (listener, address) = try_bind_listener(STARTING_PORT)?;
             let mut sender_stream = TcpStream::connect(address)?;
-            TcpStream::connect(DEFAULT_ADDR)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
             let handshake = P2PMessage::Handshake {

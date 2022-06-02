@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use crate::torrent::parsers::bencoding;
 use crate::torrent::parsers::bencoding::values::{ErrorBencoding, ValuesBencoding};
+use log::error;
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -38,12 +39,16 @@ impl Error for MetadataError {}
 ///
 pub fn read_torrent_file(filename: &str) -> ResultMetadata<Vec<u8>> {
     if !check_filename_extension_is_torrent(filename) {
+        error!("El archivo ingresado no es .torrent");
         return Err(MetadataError::IsNotTorrent);
     }
 
     let mut file = match File::open(filename) {
         Ok(file_open) => file_open,
-        Err(_) => return Err(MetadataError::FileNotFound),
+        Err(_) => {
+            error!("No se encontro ningun archivo con el nombre dado");
+            return Err(MetadataError::FileNotFound);
+        }
     };
 
     let mut bytes_vec: Vec<u8> = Vec::new();
@@ -59,7 +64,10 @@ pub fn read_torrent_file_to_dic(filename: &str) -> ResultMetadata<DicValues> {
     let metadata = read_torrent_file(filename)?;
     match bencoding::decoder::from_torrent_to_dic(metadata) {
         Ok(dic) => Ok(dic),
-        Err(error) => Err(MetadataError::TransferToDic(error)),
+        Err(error) => {
+            error!("Error al transferir la metadata a HashMap");
+            Err(MetadataError::TransferToDic(error))
+        }
     }
 }
 

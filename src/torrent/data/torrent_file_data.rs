@@ -4,7 +4,6 @@ use std::{collections::HashMap, error::Error, fmt};
 
 use super::super::parsers::bencoding::values::ValuesBencoding;
 use crate::torrent::parsers::*;
-
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 
 const ANNOUNCE: &str = "announce";
