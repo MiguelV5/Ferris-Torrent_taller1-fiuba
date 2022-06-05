@@ -9,6 +9,7 @@ mod torrent;
 fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
     info!("Iniciando el programa");
+    //[POR HACER: Crear struct/funcion que se encargue de el manejo de archivos ingresados]
     let file_str = match env::args().nth(1) {
         Some(file) => file,
         None => {
