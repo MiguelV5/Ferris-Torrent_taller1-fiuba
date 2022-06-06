@@ -375,7 +375,7 @@ impl HttpHandler {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::torrent::data::medatada_analyzer::read_torrent_file_to_dic;
+    use crate::torrent::client::medatada_analyzer::read_torrent_file_to_dic;
 
     #[test]
     fn test_creation_file1_ok() {

@@ -3,10 +3,12 @@
 //! de nuestro cliente como peer de tipo leecher.
 
 use crate::torrent::{
-    client::tracker_comunication::http_handler::HttpHandler,
+    client::{
+        medatada_analyzer::{read_torrent_file_to_dic, MetadataError},
+        tracker_comunication::http_handler::HttpHandler,
+    },
     data::{
         data_of_download::DataOfDownload,
-        medatada_analyzer::{read_torrent_file_to_dic, MetadataError},
         peer_data_for_communication::PeerDataForP2PCommunication,
         torrent_file_data::{TorrentError, TorrentFileData},
         tracker_response_data::{ResponseError, TrackerResponseData},
