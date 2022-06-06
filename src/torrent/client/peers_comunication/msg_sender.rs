@@ -34,7 +34,7 @@ const MAX_BLOCK_BYTES: u32 = 131072; //2^17 bytes
 ///
 pub fn send_handshake(client_peer: &Client, stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     let handshake_bytes = p2p::encoder::to_bytes(P2PMessage::Handshake {
-        protocol_str: PSTR_STRING_HANDSHAKE.to_string(), //esto capaz deberia ser un campo del cliente
+        protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
         info_hash: client_peer.torrent_file.info_hash.clone(),
         peer_id: client_peer.peer_id.clone(),
     })
@@ -57,31 +57,37 @@ fn send_msg(stream: &mut TcpStream, msg_variant: P2PMessage) -> Result<(), MsgSe
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Keep Alive
+///
 pub fn send_keep_alive(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::KeepAlive)
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Choke
+///
 pub fn send_choke(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::Choke)
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Unchoke
+///
 pub fn send_unchoke(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::Unchoke)
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Interested
+///
 pub fn send_interested(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::Interested)
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Not Interested
+///
 pub fn send_not_interested(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::NotInterested)
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Have
+///
 pub fn send_have(stream: &mut TcpStream, completed_piece_index: u32) -> Result<(), MsgSenderError> {
     let have_msg = P2PMessage::Have {
         piece_index: completed_piece_index,
@@ -90,6 +96,7 @@ pub fn send_have(stream: &mut TcpStream, completed_piece_index: u32) -> Result<(
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Bitfield
+///
 pub fn send_bitfield(client_peer: &Client, stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     let bitfield_msg = P2PMessage::Bitfield {
         bitfield: client_peer.data_of_download.pieces_availability.clone(),
@@ -113,6 +120,7 @@ fn check_request_or_cancel_fields(amount_of_bytes: u32) -> Result<(), MsgSenderE
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Request
+///
 pub fn send_request(
     stream: &mut TcpStream,
     piece_index: u32,
@@ -148,6 +156,7 @@ fn check_piece_fields(block: &[u8]) -> Result<(), MsgSenderError> {
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Piece
+///
 pub fn send_piece(
     stream: &mut TcpStream,
     piece_index: u32,
@@ -164,6 +173,7 @@ pub fn send_piece(
 }
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Cancel
+///
 pub fn send_cancel(
     stream: &mut TcpStream,
     piece_index: u32,
@@ -183,7 +193,7 @@ pub fn send_cancel(
 mod test_msg_sender {
     use super::*;
     use crate::torrent::{
-        client::peers_comunication::msg_receiver::receive_message,
+        client::peers_comunication::msg_receiver,
         data::{
             data_of_download::{DataOfDownload, StateOfDownload},
             peer_data_for_communication::PeerDataForP2PCommunication,
@@ -443,7 +453,7 @@ mod test_msg_sender {
 
         assert!(send_have(&mut sender_stream, 2).is_ok());
 
-        let received_msg = receive_message(&mut receptor_stream)?;
+        let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Have { piece_index: 2 };
 
         assert_eq!(expected_msg, received_msg);
@@ -461,7 +471,7 @@ mod test_msg_sender {
 
         assert!(send_bitfield(&client_peer, &mut sender_stream).is_ok());
 
-        let received_msg = receive_message(&mut receptor_stream)?;
+        let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Bitfield {
             bitfield: vec![
                 PieceStatus::MissingPiece,
@@ -491,7 +501,7 @@ mod test_msg_sender {
 
         assert!(send_bitfield(&client_peer, &mut sender_stream).is_ok());
 
-        let received_msg = receive_message(&mut receptor_stream)?;
+        let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Bitfield {
             bitfield: vec![
                 PieceStatus::ValidAndAvailablePiece,
@@ -518,7 +528,7 @@ mod test_msg_sender {
 
         assert!(send_request(&mut sender_stream, 0, 4, 4).is_ok());
 
-        let received_msg = receive_message(&mut receptor_stream)?;
+        let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Request {
             piece_index: 0,
             beginning_byte_index: 4,
@@ -570,7 +580,7 @@ mod test_msg_sender {
         let block = vec![0, 1, 2, 3];
         assert!(send_piece(&mut sender_stream, 0, 4, block.clone()).is_ok());
 
-        let received_msg = receive_message(&mut receptor_stream)?;
+        let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Piece {
             piece_index: 0,
             beginning_byte_index: 4,
@@ -621,7 +631,7 @@ mod test_msg_sender {
 
         assert!(send_cancel(&mut sender_stream, 0, 4, 4).is_ok());
 
-        let received_msg = receive_message(&mut receptor_stream)?;
+        let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Cancel {
             piece_index: 0,
             beginning_byte_index: 4,

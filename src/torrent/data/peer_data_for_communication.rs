@@ -14,8 +14,6 @@ pub struct PeerDataForP2PCommunication {
     pub am_choking: bool,
     pub am_interested: bool,
     pub peer_choking: bool,
-    //pub peer_interested: bool,
-    //...
 }
 
 impl PeerDataForP2PCommunication {

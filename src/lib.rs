@@ -25,6 +25,7 @@ use std::{env, error::Error};
 /// Funcion principal de ejecución del programa.
 /// (En su version actual) Realiza todo lo necesario para descargar una pieza válida a partir de un archivo .torrent dado por consola.
 /// Devuelve un Error si hubo algún problema durante todo el proceso.
+///
 pub fn run() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
     info!("Iniciando el programa");

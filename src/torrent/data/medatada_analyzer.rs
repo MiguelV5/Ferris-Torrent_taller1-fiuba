@@ -64,6 +64,7 @@ pub fn read_torrent_file(filename: &str) -> ResultMetadata<Vec<u8>> {
 
 /// Funcion que se encarga de leer un archivo .torrent e interpretar su info
 /// para traducirla de Bencoding a un HashMap
+///
 pub fn read_torrent_file_to_dic(filename: &str) -> ResultMetadata<DicValues> {
     let metadata = read_torrent_file(filename)?;
     match bencoding::decoder::from_torrent_to_dic(metadata) {

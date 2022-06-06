@@ -4,7 +4,9 @@
 
 use super::super::client_struct::Client;
 use super::msg_logic_control::{interact_with_single_peer, MsgLogicControlError};
+use std::ffi::OsStr;
 use std::fs;
+use std::path::Path;
 
 /// Representa un tipo de estado de interaccion para saber si se debe
 /// continuar o finalizar la misma
@@ -14,14 +16,32 @@ pub enum HandlerInteractionStatus {
 }
 
 fn flush_data(client: &mut Client) -> Result<(), MsgLogicControlError> {
-    fs::remove_dir_all("temp/torrent")
-        .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)))?;
-    fs::create_dir("temp/torrent")
+    let torrent_name = &client.torrent_file.name.clone();
+    let path_name = Path::new(torrent_name)
+        .file_stem()
+        .map_or(Some("no_name"), OsStr::to_str)
+        .map_or("pieces_of_no-named_torrent", |name| name);
+
+    let _result = fs::remove_dir_all(format!("temp/{}", path_name))
+        .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)));
+    fs::create_dir(format!("temp/{}", path_name))
         .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)))?;
 
     client
         .data_of_download
         .flush_data(client.torrent_file.total_size as u64);
+    Ok(())
+}
+
+fn remove_all(client: &mut Client) -> Result<(), MsgLogicControlError> {
+    let torrent_name = &client.torrent_file.name.clone();
+    let path_name = Path::new(torrent_name)
+        .file_stem()
+        .map_or(Some("no_name"), OsStr::to_str)
+        .map_or("pieces_of_no-named_torrent", |name| name);
+
+    let _result = fs::remove_dir_all(format!("temp/{}", path_name))
+        .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)));
     Ok(())
 }
 
@@ -62,77 +82,9 @@ pub fn handle_general_interaction(client: &mut Client) -> Result<(), MsgLogicCon
                 continue;
             }
             Err(another_err) => {
-                fs::remove_dir_all("temp/torrent").map_err(|err| {
-                    MsgLogicControlError::RestartingDownload(format!("{:?}", err))
-                })?;
+                remove_all(client)?;
                 return Err(another_err);
             }
         };
     }
 }
-
-// =================================================================================================================
-
-//
-// LOGICA PARA GENERALIZAR CUANDO HAYA MAS DE UN PEER:
-
-// use std::sync::mpsc;
-// use std::thread;
-// use std::sync::Arc;
-// use std::sync::Mutex;
-
-// pub struct ThreadPool {
-//     workers: Vec<Worker>,
-//     sender: mpsc::Sender<Job>,
-// }
-
-// type Job = Box<dyn FnOnce() + Send + 'static>;
-
-// impl ThreadPool {
-
-//     pub fn new(size: usize) -> ThreadPool {
-//         assert!(size > 0);
-
-//         let (sender, receiver) = mpsc::channel();
-
-//         let receiver = Arc::new(Mutex::new(receiver));
-
-//         let mut workers = Vec::with_capacity(size);
-
-//         for id in 0..size {
-//             workers.push(Worker::new(id, Arc::clone(&receiver)));
-//         }
-
-//         ThreadPool { workers, sender }
-//     }
-
-//     // --snip--
-
-//     pub fn execute<F>(&self, f: F)
-//     where
-//         F: FnOnce() + Send + 'static,
-//     {
-//         let job = Box::new(f);
-
-//         self.sender.send(job).unwrap();
-//     }
-// }
-
-// struct Worker {
-//     id: usize,
-//     thread: thread::JoinHandle<()>,
-// }
-
-// impl Worker {
-//     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
-//         let thread = thread::spawn(move || loop {
-//             let job = receiver.lock().unwrap().recv().unwrap();
-
-//             println!("Worker {} got a job; executing.", id);
-
-//             job();
-//         });
-
-//         Worker { id, thread }
-//     }
-// }

@@ -93,7 +93,6 @@ impl PeerDataFromTrackerResponse {
 #[derive(PartialEq, Debug, Clone)]
 pub struct TrackerResponseData {
     pub interval: u64,
-    //pub tracker_id: String,
     pub complete: u64,
     pub incomplete: u64,
     pub peers: Vec<PeerDataFromTrackerResponse>,

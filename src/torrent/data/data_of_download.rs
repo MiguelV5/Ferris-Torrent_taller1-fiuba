@@ -27,6 +27,7 @@ pub struct DataOfDownload {
 impl DataOfDownload {
     /// Funcion que crea informacion inicial del estado de descarga de un
     /// torrent.
+    ///
     pub fn new(size_torrent: u64, total_amount_pieces: usize) -> Self {
         let mut pieces_availability = Vec::with_capacity(total_amount_pieces);
         pieces_availability.resize(total_amount_pieces, PieceStatus::MissingPiece);
@@ -41,6 +42,7 @@ impl DataOfDownload {
     }
 
     /// Funcion que indica si una pieza de tal indice está faltante por descargar
+    ///
     pub fn is_a_missing_piece(&self, piece_index: usize) -> bool {
         if let Some(piece_status) = self.pieces_availability.get(piece_index) {
             *piece_status == PieceStatus::MissingPiece
@@ -50,6 +52,7 @@ impl DataOfDownload {
     }
 
     /// Funcion que indica si una pieza de tal indice ya fue descargada correctamente
+    ///
     pub fn is_a_valid_and_available_piece(&self, piece_index: usize) -> bool {
         if let Some(piece_status) = self.pieces_availability.get(piece_index) {
             *piece_status == PieceStatus::ValidAndAvailablePiece
@@ -59,6 +62,7 @@ impl DataOfDownload {
     }
 
     /// Funcion que reinicia la data de la descarga actual desde cero
+    ///
     pub fn flush_data(&mut self, size_torrent: u64) {
         self.uploaded = 0;
         self.downloaded = 0;

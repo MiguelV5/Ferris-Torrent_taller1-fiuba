@@ -209,11 +209,11 @@ impl TorrentFileData {
     ///Funcion para crear un TorrentFileData, necesita que se le pase un HashMap que tenga Vec<u8> como clave
     /// y ValuesBencoding como valores con los campos requeridos de un archivo .torrent, en caso de que no
     /// contenga alguno o haya formatos distintos a los deseados se devolvera el error correspondiente
+    ///
     pub fn new(dic_torrent: DicValues) -> Result<Self, TorrentError> {
         let info = init_info(&dic_torrent)?;
 
         let piece_length = init_piece_length(&info)?;
-        //[POR HACER: Que el size_files sea un atributo mas del TorrentFileData]
         let size_files = init_size_files(&info)?;
         let total_size = init_total_size(size_files);
         let total_amount_pieces = init_total_amount_pieces(total_size, piece_length);
@@ -233,11 +233,13 @@ impl TorrentFileData {
     }
 
     ///Funcion que devuelve true si el Torrent representado es Single File y false si es Multiple File
+    ///
     pub fn is_single_file(&self) -> bool {
         self.is_single_file
     }
 
     ///Funcion que devuelve la url del tracker principal del Torrent
+    ///
     pub fn get_tracker_main(&self) -> String {
         self.url_tracker_main.clone()
     }
@@ -247,38 +249,45 @@ impl TorrentFileData {
     /// Este valor varia dependiendo del tipo de Torrent que es, en caso de ser single file, este sera
     /// el nombre del archivo y en caso de ser multiple file este sera el nombre de la carpeta contenedora
     /// de los archivos.
+    ///
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
 
     ///Funcion que va a devolver el info_hash, que es el campo info del .torrent bencodeado y encriptado mediante
     /// SHA-1
+    ///
     pub fn get_info_hash(&self) -> Vec<u8> {
         self.info_hash.clone()
     }
 
     ///Funcion que devuelve el tamaño total de todos los archivos
+    ///
     pub fn get_total_size(&self) -> i64 {
         self.total_size
     }
 
     ///Funcion que devuelve el largo que van a tener las piezas
+    ///
     pub fn get_piece_length(&self) -> i64 {
         self.piece_length
     }
 
     ///Funcion que devuelve la cantidad total de piezas que va a tener el archivo
+    ///
     pub fn get_total_amount_pieces(&self) -> usize {
         self.total_amount_pieces
     }
 
     ///Funcion que va a devolver los path de los archivos [Solo se utiliza en caso de que el torrent
     /// sea multiple file]
+    ///
     pub fn get_paths(&self) -> Vec<String> {
         self.path.clone()
     }
 
     ///Funcion que dado el numero de pieza devuelve su encriptacion en SHA-1
+    ///
     pub fn get_piece_sha1(&self, piece_index: usize) -> Vec<u8> {
         let mut pieces_return = vec![];
         let mut long_sha1 = 20;

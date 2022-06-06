@@ -67,6 +67,7 @@ impl fmt::Display for ClientError {
 impl Error for ClientError {}
 
 /// Funcion que crea un peer id unico para este cliente como peer
+///
 pub fn generate_peer_id() -> Vec<u8> {
     let rand_alphanumeric: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
@@ -79,6 +80,7 @@ pub fn generate_peer_id() -> Vec<u8> {
 }
 
 /// Funcion que lee toda la metadata y almacena su información importante
+///
 pub fn create_torrent(torrent_path: &str) -> ResultClient<TorrentFileData> {
     trace!("Leyendo el archivo para poder crear el torrent");
     let torrent_dic = match read_torrent_file_to_dic(torrent_path) {
@@ -101,6 +103,7 @@ pub fn create_torrent(torrent_path: &str) -> ResultClient<TorrentFileData> {
 
 /// Funcion que realiza toda la comunicación con el tracker, interpreta su
 /// respuesta y devuelve la info importante de la misma
+///
 pub fn init_communication(torrent: TorrentFileData) -> ResultClient<TrackerResponseData> {
     let str_peer_id = String::from_utf8_lossy(&generate_peer_id()).to_string();
     trace!("Creando httpHandler dentro del Client");
@@ -175,6 +178,7 @@ impl Client {
 
     /// Funcion que realiza toda la comunicación con el tracker, interpreta su
     /// respuesta y almacena la info importante de la misma
+    ///
     pub fn init_communication(&mut self) -> ResultClient<()> {
         match init_communication(self.torrent_file.clone()) {
             Ok(response) => self.tracker_response = Some(response),
@@ -186,7 +190,6 @@ impl Client {
 
     //HANDSHAKE
     fn has_expected_peer_id(&self, server_peer_id: &[u8], server_peer_index: usize) -> bool {
-        //esto podria ser algo del TrackerResponse
         if let Some(tracker_response) = &self.tracker_response {
             match tracker_response.peers.get(server_peer_index) {
                 Some(tracker_response_peer_data) => {
@@ -237,6 +240,7 @@ impl Client {
 
     /// Funcion que realiza la verificacion de un mensaje recibido de tipo
     /// Handshake y almacena su info importante
+    ///
     pub fn check_and_save_handshake_data(
         &mut self,
         message: P2PMessage,
@@ -297,6 +301,7 @@ impl Client {
 
     /// Funcion que actualiza la representación de bitfield de un peer dado
     /// por su indice
+    ///
     pub fn update_peer_bitfield(
         &mut self,
         mut bitfield: Vec<PieceStatus>,
@@ -322,6 +327,7 @@ impl Client {
     /// por su indice (A diferencia de [update_peer_bitfield()], esta funcion
     /// actualiza solo el estado de UNA pieza, esto es causado por
     /// la recepcion de un mensaje P2P de tipo Have)
+    ///
     pub fn update_server_peer_piece_status(
         &mut self,
         server_peer_index: usize,
@@ -419,11 +425,7 @@ impl Client {
         Ok(())
     }
 
-    fn set_up_directory(
-        &mut self,
-        _piece_index: u32,
-        path: &str,
-    ) -> Result<(), MsgLogicControlError> {
+    fn set_up_directory(&mut self, path: &str) -> Result<(), MsgLogicControlError> {
         if self
             .data_of_download
             .pieces_availability
@@ -493,6 +495,7 @@ impl Client {
     /// Si se completa una pieza tras el guardado, se verifica la
     /// misma por medio de su SHA1 y el que venia como correspondiente
     /// a dicha pieza en el .torrent
+    ///
     pub fn store_block(
         &mut self,
         piece_index: u32,
@@ -501,7 +504,7 @@ impl Client {
         path: &str,
     ) -> Result<(), MsgLogicControlError> {
         self.check_store_block(piece_index, beginning_byte_index, &block)?;
-        self.set_up_directory(piece_index, path)?;
+        self.set_up_directory(path)?;
         block_handler::store_block(&block, piece_index, path)
             .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
 
@@ -524,7 +527,6 @@ impl Client {
             info!("Verifico el hash SHA1 de la pieza descargada.");
             block_handler::check_sha1_piece(self, piece_index, path)
                 .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
-            //ver lo que devuelve porque en caso de que devuelva error, borro la pieza y tengo que seguir buscando a otro peer para que me de una valida
         }
         Ok(())
     }
@@ -532,6 +534,7 @@ impl Client {
     // UPDATING FIELDS
     /// Funcion que actualiza si el cliente está interesado en una pieza
     /// de un peer dado por su indice.
+    ///
     pub fn update_am_interested_field(
         &mut self,
         server_peer_index: usize,
@@ -554,6 +557,7 @@ impl Client {
     }
 
     /// Funcion que actualiza si un peer me tiene chokeado a mi cliente
+    ///
     pub fn update_peer_choking_field(
         &mut self,
         server_peer_index: usize,
@@ -576,6 +580,7 @@ impl Client {
     }
 
     /// Funcion que actualiza si mi cliente tiene chokeado a un peer especifico
+    ///
     pub fn update_am_choking_field(
         &mut self,
         server_peer_index: usize,
@@ -599,6 +604,7 @@ impl Client {
 
     // ASK FOR INFORMATION
     /// Funcion que revisa si tal peer me tiene chokeado a mi
+    ///
     pub fn peer_choking(&self, server_peer_index: usize) -> bool {
         if let Some(list_of_peers_data_for_communication) =
             &self.list_of_peers_data_for_communication
@@ -613,6 +619,7 @@ impl Client {
     }
 
     /// Funcion que revisa si mi cliente esta interesado en un peer especifico
+    ///
     pub fn am_interested(&self, server_peer_index: usize) -> bool {
         if let Some(list_of_peers_data_for_communication) =
             &self.list_of_peers_data_for_communication
@@ -649,6 +656,7 @@ impl Client {
 
     /// Funcion que busca una nueva pieza que quiera pedir posteriormente, y
     /// devuelve su indice
+    ///
     pub fn look_for_a_missing_piece_index(&self, server_peer_index: usize) -> Option<usize> {
         let (piece_index, _piece_status) = self
             .data_of_download
@@ -667,6 +675,7 @@ impl Client {
 
     /// Funcion que calcula el byte inicial desde el cual
     /// se deberia pedir el siguiente bloque de una pieza
+    ///
     pub fn calculate_beginning_byte_index(
         &self,
         piece_index: u32,
@@ -691,6 +700,7 @@ impl Client {
     }
 
     /// Funcion que calcula la longitud de las piezas (NO bloques) a ser pedidas
+    ///
     pub fn calculate_piece_lenght(&self, piece_index: u32) -> Result<u32, MsgLogicControlError> {
         if self.is_last_piece_index(piece_index) {
             let std_piece_lenght = self.torrent_file.piece_length;
@@ -710,6 +720,7 @@ impl Client {
 
     /// Funcion que calcula la cantidad de bytes adecuada a pedir
     /// posteriormente a un peer
+    ///
     pub fn calculate_amount_of_bytes(
         &self,
         piece_index: u32,

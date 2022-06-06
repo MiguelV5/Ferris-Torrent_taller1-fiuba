@@ -61,7 +61,6 @@ struct MsgDescriptor {
     uploaded: u64,
     downloaded: u64,
     left: u64,
-    //compact: u8,
     event: String,
     host: String,
 }
@@ -115,6 +114,7 @@ fn add_description_msg(msg: &mut String, type_msg: &str, value: String) {
 impl MsgDescriptor {
     ///Funcion que va a crear un MsgDescriptor, la cual necesita para crearse un TorrentFileData y
     /// un peer_id, esta estructura va a servir para crear el mensaje de request al tracker
+    ///
     pub fn new(torrent: TorrentFileData, peer_id: String) -> ResultMsg<Self> {
         let info_hash = init_info_hash(torrent.get_info_hash());
         let ip = String::from(IP_CLIENT);
@@ -124,14 +124,12 @@ impl MsgDescriptor {
         let left = torrent.get_total_size() as u64;
         let event = String::from(STARTED);
         let host = init_host(torrent.get_tracker_main())?;
-        //let compact = 0;
 
         Ok(MsgDescriptor {
             info_hash,
             peer_id,
             ip,
             port,
-            //compact,
             uploaded,
             downloaded,
             left,
@@ -165,7 +163,6 @@ impl MsgDescriptor {
     pub fn get_downloaded(&self) -> String {
         self.downloaded.to_string()
     }
-
     //pub fn get_compact(&self) -> String {
     //    self.compact.to_string()
     //}
@@ -182,7 +179,6 @@ impl MsgDescriptor {
     pub fn get_host(&self) -> String {
         self.host.clone()
     }
-    //[POR HACER: Realizar cambio de puertos en caso de que el primero falle]
 
     ///Esta funcion cambia el puerto para la comunicacion con el tracker, los puertos
     /// validos son del 6881 al 6889 si el cambio es exitoso devolvera Ok(()), en caso de llegar al

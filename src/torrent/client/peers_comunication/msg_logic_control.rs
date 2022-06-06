@@ -118,6 +118,7 @@ fn update_information_according_to_the_received_msg(
     Ok(())
 }
 
+//LOOK FOR PIECES AND SEND MESSAGE
 fn send_msg_according_to_peer_choking_field(
     client_peer: &mut Client,
     server_peer_index: usize,

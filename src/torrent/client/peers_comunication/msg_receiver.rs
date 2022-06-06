@@ -71,7 +71,6 @@ fn build_msg(
     Ok(message)
 }
 
-///
 /// Funcion encargada de recibir e interpretar un mensaje P2P en general,
 /// exceptuando el Handshake (esto se debe a que tiene un formato distinto
 /// a los demas mensajes)
