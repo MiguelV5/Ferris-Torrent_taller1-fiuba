@@ -1,28 +1,30 @@
-#![allow(dead_code)]
-use crate::torrent::data::tracker_response_data::TrackerResponseData;
-use crate::torrent::parsers::p2p::message::PieceStatus;
-use crate::torrent::{client::client_struct::*, parsers::p2p::message::P2PMessage};
+//! # Modulo de logica de control para interaccion individual
+//! Este modulo contiene las funciones encargadas de manejar la conexion y
+//! comunicacion exclusivamente un peer indicado
+//!
+
+use crate::torrent::{
+    client::client_struct::*,
+    data::tracker_response_data::TrackerResponseData,
+    parsers::p2p::message::{P2PMessage, PieceStatus},
+};
 use core::fmt;
 use log::{debug, info};
-use std::error::Error;
-use std::net::TcpStream;
-use std::time::Duration;
+use std::{error::Error, ffi::OsStr, net::TcpStream, path::Path, time::Duration};
 
-use super::handler::HandlerInteractionStatus;
-use super::msg_receiver::{self, MsgReceiverError};
-use super::msg_sender::{self, MsgSenderError};
+use super::{
+    handler::HandlerInteractionStatus,
+    msg_receiver::{self, MsgReceiverError},
+    msg_sender::{self, MsgSenderError},
+};
 
 pub const BLOCK_BYTES: u32 = 16384; //2^14 bytes
 
 pub const SECS_READ_TIMEOUT: u64 = 120;
 pub const NANOS_READ_TIMEOUT: u32 = 0;
 
-/*
- * Falta:
- * - Documentar
- */
-
 #[derive(PartialEq, Debug, Clone)]
+/// Representa un tipo de error en la comunicación general P2P con un peer individual.
 pub enum MsgLogicControlError {
     ConectingWithPeer(String),
     RestartingDownload(String),
@@ -97,7 +99,14 @@ fn update_information_according_to_the_received_msg(
             beginning_byte_index,
             block,
         } => {
-            client_peer.store_block(piece_index, beginning_byte_index, block, "torrent")?;
+            let torrent_name = &client_peer.torrent_file.name.clone();
+            let path_name = Path::new(torrent_name)
+                .file_stem()
+                .map_or(Some("no_name"), OsStr::to_str)
+                .map_or("pieces_of_no-named_torrent", |name| name);
+
+            client_peer.store_block(piece_index, beginning_byte_index, block, path_name)?;
+
             debug!(
                 "Nuevo estado de la pieza {}: {:?}",
                 piece_index, client_peer.data_of_download.pieces_availability[0]
@@ -232,11 +241,10 @@ fn log_info_msg(msg: &P2PMessage) {
     }
 }
 
-//
-//
-//
-//
-// FUNCION PRINCIPAL
+/// Funcion encargada de la interacción general con un peer individual.
+/// Maneja toda la logica de intercambio de mensajes con dicho peer
+/// para ir pidiendo y descargando por bloques al torrent correspondiente.
+///
 pub fn interact_with_single_peer(
     client_peer: &mut Client,
     tracker_response_server_peer_index: usize,

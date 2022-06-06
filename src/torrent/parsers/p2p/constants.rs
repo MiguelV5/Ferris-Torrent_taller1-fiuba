@@ -1,3 +1,6 @@
+//! # Modulo de constantes
+//! Constantes utiles para uso en parseo para mensajes de comunicación P2P.
+
 pub const NUM_BITS_ON_A_BYTE: usize = 8;
 
 pub const MIN_BYTES_OF_A_P2P_MSG: usize = 4;
@@ -19,5 +22,3 @@ pub const ID_REQUEST: u8 = 6;
 pub const ID_PIECE: u8 = 7;
 pub const ID_CANCEL: u8 = 8;
 pub const ID_PORT: u8 = 9;
-
-//pub const DEFAULT_REQUESTED_BLOCK_SIZE: u32 = 16384; // 16KB - 2^14.

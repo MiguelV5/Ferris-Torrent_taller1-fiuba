@@ -1,8 +1,13 @@
-#![allow(dead_code)]
+//! # Modulo de data de respuesta de un Tracker
+//! Este modulo contiene las funciones encargadas de analizar y almacenar la
+//! información importante tras haberse comunicado con un tracker
 
-use super::super::parsers::bencoding::values::ValuesBencoding;
-use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use crate::torrent::parsers::bencoding::values::ValuesBencoding;
+
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+};
 
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 type ResultResponse<T> = Result<T, ResponseError>;
@@ -16,6 +21,7 @@ const IP: &str = "ip";
 const PORT: &str = "port";
 
 #[derive(Debug, PartialEq)]
+///Enumerado que representa la seccion en la que el error puede surgir
 pub enum Section {
     Interval,
     Complete,
@@ -27,6 +33,7 @@ pub enum Section {
 }
 
 #[derive(Debug, PartialEq)]
+///Enumerado que representa la seccion en la que el error puede surgir al analizar una response
 pub enum ResponseError {
     NotFound(Section),
     Format(Section),

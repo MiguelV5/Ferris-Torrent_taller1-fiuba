@@ -1,35 +1,42 @@
-#![allow(dead_code)]
-use crate::torrent::data::medatada_analyzer::MetadataError;
-use crate::torrent::data::torrent_file_data::TorrentError;
-use crate::torrent::data::tracker_response_data::ResponseError;
-use crate::torrent::data::{
-    data_of_download::DataOfDownload, peer_data_for_communication::PeerDataForP2PCommunication,
-    torrent_file_data::TorrentFileData, tracker_response_data::TrackerResponseData,
+//! # Modulo de manejo general de la estructura principal: Client
+//! Este modulo contiene las funciones encargadas del comportamiento general
+//! de nuestro cliente como peer de tipo leecher.
+
+use crate::torrent::{
+    client::tracker_comunication::http_handler::HttpHandler,
+    data::{
+        data_of_download::DataOfDownload,
+        medatada_analyzer::{read_torrent_file_to_dic, MetadataError},
+        peer_data_for_communication::PeerDataForP2PCommunication,
+        torrent_file_data::{TorrentError, TorrentFileData},
+        tracker_response_data::{ResponseError, TrackerResponseData},
+    },
+    parsers::p2p::{
+        constants::PSTR_STRING_HANDSHAKE,
+        message::{P2PMessage, PieceStatus},
+    },
+};
+
+use super::{
+    block_handler,
+    peers_comunication::msg_logic_control::{MsgLogicControlError, BLOCK_BYTES},
+    tracker_comunication::http_handler::ErrorMsgHttp,
 };
 
 extern crate rand;
 
-use crate::torrent::client::tracker_comunication::http_handler::HttpHandler;
-use crate::torrent::data::medatada_analyzer::read_torrent_file_to_dic;
-use crate::torrent::parsers::bencoding::values::ValuesBencoding;
-use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
-use crate::torrent::parsers::p2p::message::{P2PMessage, PieceStatus};
 use log::{debug, error, info, trace};
 use rand::{distributions::Alphanumeric, Rng};
-use std::collections::HashMap;
-use std::error::Error;
-use std::{fmt, fs};
 
-use super::block_handler;
-use super::peers_comunication::msg_logic_control::{MsgLogicControlError, BLOCK_BYTES};
-use super::tracker_comunication::http_handler::ErrorMsgHttp;
+use std::{error::Error, fmt, fs};
+
 const SIZE_PEER_ID: usize = 12;
 const INIT_PEER_ID: &str = "-FA0000-";
 
-type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 type ResultClient<T> = Result<T, ClientError>;
 
 #[derive(PartialEq, Debug, Clone)]
+/// Struct que tiene por comportamiento todo el manejo general de actualizacion importante de datos, almacenamiento de los mismos y ejecución de metodos importantes para la comunicación con peers durante la ejecución del programa a modo de leecher.
 pub struct Client {
     pub peer_id: Vec<u8>,
     pub info_hash: Vec<u8>,
@@ -41,6 +48,7 @@ pub struct Client {
 }
 
 #[derive(PartialEq, Debug)]
+// Representa posibles errores durante la ejecucion de alguna de sus funcionalidades
 pub enum ClientError {
     File(MetadataError),
     HttpCreation(ErrorMsgHttp),
@@ -58,6 +66,7 @@ impl fmt::Display for ClientError {
 
 impl Error for ClientError {}
 
+/// Funcion que crea un peer id unico para este cliente como peer
 pub fn generate_peer_id() -> Vec<u8> {
     let rand_alphanumeric: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
@@ -69,6 +78,7 @@ pub fn generate_peer_id() -> Vec<u8> {
     str_peer.as_bytes().to_vec()
 }
 
+/// Funcion que lee toda la metadata y almacena su información importante
 pub fn create_torrent(torrent_path: &str) -> ResultClient<TorrentFileData> {
     trace!("Leyendo el archivo para poder crear el torrent");
     let torrent_dic = match read_torrent_file_to_dic(torrent_path) {
@@ -89,6 +99,8 @@ pub fn create_torrent(torrent_path: &str) -> ResultClient<TorrentFileData> {
     }
 }
 
+/// Funcion que realiza toda la comunicación con el tracker, interpreta su
+/// respuesta y devuelve la info importante de la misma
 pub fn init_communication(torrent: TorrentFileData) -> ResultClient<TrackerResponseData> {
     let str_peer_id = String::from_utf8_lossy(&generate_peer_id()).to_string();
     trace!("Creando httpHandler dentro del Client");
@@ -138,6 +150,11 @@ fn update_list_of_peers_data_for_communication(
 }
 
 impl Client {
+    /// Funcion que interpreta toda la info del .torrent, se comunica con el
+    /// tracker correspondiente y almacena todos los datos importantes para
+    /// su uso posterior en comunicacion con peers, devolviendo así
+    /// una instancia de la estructura lista para ello.
+    ///
     pub fn new(path_file: &str) -> ResultClient<Self> {
         trace!("Genero peer_id");
         let peer_id = generate_peer_id();
@@ -156,6 +173,8 @@ impl Client {
         })
     }
 
+    /// Funcion que realiza toda la comunicación con el tracker, interpreta su
+    /// respuesta y almacena la info importante de la misma
     pub fn init_communication(&mut self) -> ResultClient<()> {
         match init_communication(self.torrent_file.clone()) {
             Ok(response) => self.tracker_response = Some(response),
@@ -216,6 +235,8 @@ impl Client {
         };
     }
 
+    /// Funcion que realiza la verificacion de un mensaje recibido de tipo
+    /// Handshake y almacena su info importante
     pub fn check_and_save_handshake_data(
         &mut self,
         message: P2PMessage,
@@ -274,6 +295,8 @@ impl Client {
         Ok(())
     }
 
+    /// Funcion que actualiza la representación de bitfield de un peer dado
+    /// por su indice
     pub fn update_peer_bitfield(
         &mut self,
         mut bitfield: Vec<PieceStatus>,
@@ -295,6 +318,10 @@ impl Client {
     }
 
     // HAVE
+    /// Funcion que actualiza la representación de bitfield de un peer dado
+    /// por su indice (A diferencia de [update_peer_bitfield()], esta funcion
+    /// actualiza solo el estado de UNA pieza, esto es causado por
+    /// la recepcion de un mensaje P2P de tipo Have)
     pub fn update_server_peer_piece_status(
         &mut self,
         server_peer_index: usize,
@@ -394,7 +421,7 @@ impl Client {
 
     fn set_up_directory(
         &mut self,
-        piece_index: u32,
+        _piece_index: u32,
         path: &str,
     ) -> Result<(), MsgLogicControlError> {
         if self
@@ -460,6 +487,12 @@ impl Client {
         self.data_of_download.left -= amount_of_bytes;
     }
 
+    /// Funcion encargada de realizar toda la logica de guardado de
+    /// un bloque en disco y actualizacion correspondiente de
+    /// mi propio bitfield y el estado de la descarga.
+    /// Si se completa una pieza tras el guardado, se verifica la
+    /// misma por medio de su SHA1 y el que venia como correspondiente
+    /// a dicha pieza en el .torrent
     pub fn store_block(
         &mut self,
         piece_index: u32,
@@ -497,6 +530,8 @@ impl Client {
     }
 
     // UPDATING FIELDS
+    /// Funcion que actualiza si el cliente está interesado en una pieza
+    /// de un peer dado por su indice.
     pub fn update_am_interested_field(
         &mut self,
         server_peer_index: usize,
@@ -518,6 +553,7 @@ impl Client {
         }
     }
 
+    /// Funcion que actualiza si un peer me tiene chokeado a mi cliente
     pub fn update_peer_choking_field(
         &mut self,
         server_peer_index: usize,
@@ -539,6 +575,7 @@ impl Client {
         }
     }
 
+    /// Funcion que actualiza si mi cliente tiene chokeado a un peer especifico
     pub fn update_am_choking_field(
         &mut self,
         server_peer_index: usize,
@@ -561,6 +598,7 @@ impl Client {
     }
 
     // ASK FOR INFORMATION
+    /// Funcion que revisa si tal peer me tiene chokeado a mi
     pub fn peer_choking(&self, server_peer_index: usize) -> bool {
         if let Some(list_of_peers_data_for_communication) =
             &self.list_of_peers_data_for_communication
@@ -574,6 +612,7 @@ impl Client {
         true
     }
 
+    /// Funcion que revisa si mi cliente esta interesado en un peer especifico
     pub fn am_interested(&self, server_peer_index: usize) -> bool {
         if let Some(list_of_peers_data_for_communication) =
             &self.list_of_peers_data_for_communication
@@ -608,6 +647,8 @@ impl Client {
         false
     }
 
+    /// Funcion que busca una nueva pieza que quiera pedir posteriormente, y
+    /// devuelve su indice
     pub fn look_for_a_missing_piece_index(&self, server_peer_index: usize) -> Option<usize> {
         let (piece_index, _piece_status) = self
             .data_of_download
@@ -624,6 +665,8 @@ impl Client {
         Some(piece_index)
     }
 
+    /// Funcion que calcula el byte inicial desde el cual
+    /// se deberia pedir el siguiente bloque de una pieza
     pub fn calculate_beginning_byte_index(
         &self,
         piece_index: u32,
@@ -647,6 +690,7 @@ impl Client {
         self.data_of_download.pieces_availability.len() - 1 == piece_index as usize
     }
 
+    /// Funcion que calcula la longitud de las piezas (NO bloques) a ser pedidas
     pub fn calculate_piece_lenght(&self, piece_index: u32) -> Result<u32, MsgLogicControlError> {
         if self.is_last_piece_index(piece_index) {
             let std_piece_lenght = self.torrent_file.piece_length;
@@ -664,6 +708,8 @@ impl Client {
         }
     }
 
+    /// Funcion que calcula la cantidad de bytes adecuada a pedir
+    /// posteriormente a un peer
     pub fn calculate_amount_of_bytes(
         &self,
         piece_index: u32,
@@ -683,17 +729,19 @@ impl Client {
 #[cfg(test)]
 mod test_client {
     use super::*;
-    use std::error::Error;
+    use std::{error::Error, net::SocketAddr, str::FromStr};
 
-    use crate::torrent::data::data_of_download::{DataOfDownload, StateOfDownload};
-    use crate::torrent::data::torrent_file_data::TorrentFileData;
-    use crate::torrent::data::tracker_response_data::{
-        PeerDataFromTrackerResponse, TrackerResponseData,
+    use crate::torrent::{
+        data::{
+            data_of_download::{DataOfDownload, StateOfDownload},
+            torrent_file_data::TorrentFileData,
+            tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
+        },
+        parsers::p2p::{
+            constants::PSTR_STRING_HANDSHAKE,
+            message::{P2PMessage, PieceStatus},
+        },
     };
-    use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
-    use crate::torrent::parsers::p2p::message::{P2PMessage, PieceStatus};
-    use std::net::SocketAddr;
-    use std::str::FromStr;
 
     #[derive(PartialEq, Debug, Clone)]
     pub enum TestingError {
@@ -711,7 +759,6 @@ mod test_client {
     pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
     pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
     pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
-    pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
     pub const DEFAULT_INFO_HASH: [u8; 20] = [0; 20];
 
     fn create_default_client_peer_with_no_server_peers() -> Result<Client, Box<dyn Error>> {

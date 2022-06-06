@@ -1,13 +1,19 @@
-#![allow(dead_code)]
-use core::fmt;
-use log::debug;
-use sha1::{Digest, Sha1};
-use std::error::Error;
-use std::fs;
-use std::io::Read;
-use std::{fs::OpenOptions, io::Write};
+//! # Modulo de manejo general de almacenamiento de BLOQUES
+//! Este modulo contiene las funciones encargadas de almacenar bloques
+//! recibidos de mensajes de tipo "Piece" en medio de interacciones individuales
+//! con peers.
 
 use super::client_struct::Client;
+use core::fmt;
+use log::info;
+use sha1::{Digest, Sha1};
+use std::{
+    error::Error,
+    fs::{self, OpenOptions},
+    io::{Read, Write},
+};
+
+/// Representa un error de manejo de almacenamiento de bloque.
 #[derive(PartialEq, Debug, Clone)]
 pub enum BlockHandlerError {
     StoringBlock(String),
@@ -23,6 +29,9 @@ impl fmt::Display for BlockHandlerError {
 
 impl Error for BlockHandlerError {}
 
+/// Funcion que, dado un bloque descargado de una comunicacion individual con
+/// un peer, escribe en disco (en un path correspondiente a su PIEZA respectiva)
+/// dicho bloque
 pub fn store_block(block: &[u8], piece_index: u32, path: &str) -> Result<(), BlockHandlerError> {
     let file_name = format!("temp/{}/piece_{}", path, piece_index);
     let mut file = OpenOptions::new()
@@ -74,9 +83,12 @@ pub fn check_sha1_piece(
             .map_err(|err| BlockHandlerError::CheckingSha1Piece(format!("{:?}", err)))?,
     );
 
-    debug!("Hash SHA1 esperado: {:?}", to_hex(&expected_piece_sha1));
-    debug!(
-        "Hash SHA1 obtenido por pieza descargada: {:?}",
+    info!(
+        "\n    Hash SHA1 esperado: {:?}",
+        to_hex(&expected_piece_sha1)
+    );
+    info!(
+        "\n    Hash SHA1 obtenido por pieza descargada: {:?}",
         to_hex(&piece_sha1)
     );
 
@@ -94,22 +106,11 @@ pub fn check_sha1_piece(
 #[cfg(test)]
 mod test_block_handler {
     use super::*;
-    use core::fmt;
-    use std::error::Error;
-    use std::fs::{self, File};
-    use std::io::Read;
-    #[derive(PartialEq, Debug, Clone)]
-    pub enum TestingError {
-        ClientPeerFieldsInvalidAccess(String),
-    }
-
-    impl fmt::Display for TestingError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{:?}", self)
-        }
-    }
-
-    impl Error for TestingError {}
+    use std::{
+        error::Error,
+        fs::{self, File},
+        io::Read,
+    };
 
     #[test]
     fn one_block_can_be_stored() -> Result<(), Box<dyn Error>> {

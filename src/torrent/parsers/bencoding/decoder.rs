@@ -1,7 +1,7 @@
 //!# Modulo de decoder de Bencoding
 //! Este modulo va a servir para pasar a String/Integer/List/Dic dado un String
 //!  que esta en el formato Bencoding
-#![allow(dead_code)]
+
 use super::constants::*;
 use super::values::*;
 use std::collections::HashMap;
@@ -14,7 +14,6 @@ type TupleValueRest = (ValuesBencoding, Vec<u8>);
 type TupleDicRest = (DicValues, Vec<u8>);
 
 const NEGATIVE_ZERO: &str = "-0";
-const IS_TORRENT: char = 't';
 const MINUS: char = '-';
 const ZERO: char = '0';
 
@@ -24,7 +23,7 @@ type ResultBencoding<T> = Result<T, ErrorBencoding>;
 /// de una tupla con el String desencodeado y lo que sobre del String pasado, o en caso de error se devolvera
 /// el mismo que sera del tipo ErrorBencoding, por ej: en caso de pasar "4:testi32e3:fin" se devolvera Ok con la tupla
 /// ("test", "i32e3:fin")
-pub fn to_string(to_parse: Vec<u8>) -> ResultBencoding<TupleStringRest> {
+fn to_string(to_parse: Vec<u8>) -> ResultBencoding<TupleStringRest> {
     let mut result = vec![];
     let mut long_string = String::new();
     let mut valid_format = false;
@@ -81,7 +80,7 @@ fn is_valid_number(num: String) -> bool {
 ///Funcion que va a pasar un String en formato bencoding a un i64, los cual va a devolverlos en un Result, con el
 /// formato de una tupla, la cual su primer valor sera el i64 y el siguiente el resto del string del bencoding pasado,
 /// en caso de error se devolvera el mismo
-pub fn to_integer(to_parse: Vec<u8>) -> ResultBencoding<TupleIntegerRest> {
+fn to_integer(to_parse: Vec<u8>) -> ResultBencoding<TupleIntegerRest> {
     let mut num_str = String::new();
     let mut valid_format = false;
     let mut list_chars = to_parse.into_iter();
@@ -142,7 +141,7 @@ fn take_value_by_type(
 ///Funcion que va a desencodear un String del tipo Bencoding en una lista ([Vec]), la cual sera devuelta en un Result con
 /// el formato de una tupla en la cual su primer valor sera la lista desencodeada y su segundo valor sera el restante del String,
 /// en caso de error se devolvera el mismo
-pub fn to_list(to_parse: Vec<u8>) -> ResultBencoding<TupleListRest> {
+fn to_list(to_parse: Vec<u8>) -> ResultBencoding<TupleListRest> {
     let mut list_return = Vec::new();
     let mut valid_format = false;
     let mut list_chars = to_parse.into_iter();

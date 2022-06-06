@@ -1,9 +1,11 @@
-#![allow(dead_code)]
+//! # Modulo de data de un archivo .torrent
+//! Este modulo contiene las funciones encargadas de almacenar solo la info
+//! importante a partir de la info completa de un .torrent interpretado.
+
 use sha1::{Digest, Sha1};
 use std::{collections::HashMap, error::Error, fmt};
 
-use super::super::parsers::bencoding::values::ValuesBencoding;
-use crate::torrent::parsers::*;
+use crate::torrent::parsers::{bencoding::values::ValuesBencoding, *};
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 
 const ANNOUNCE: &str = "announce";
@@ -16,8 +18,8 @@ const NAME: &str = "name";
 const PIECES: &str = "pieces";
 const PATH: &str = "path";
 
-///Enumerado que representa la seccion en la que el error puede surgir
 #[derive(Debug, PartialEq)]
+///Enumerado que representa la seccion en la que el error puede surgir
 pub enum Section {
     Announce,
     Info,
@@ -29,15 +31,14 @@ pub enum Section {
     Path,
 }
 
+#[derive(Debug, PartialEq)]
 ///Enumerado que representa el tipo de error que puede surgir, que por dentreo tendra
 /// su seccion correspondiente
-#[derive(Debug, PartialEq)]
 pub enum TorrentError {
     NotFound(Section),
     Format(Section),
 }
-//Queda todavia por hacer:
-// *Cambio de tracker_main por si el primero no funciona
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct TorrentFileData {
     pub is_single_file: bool,
@@ -230,14 +231,17 @@ impl TorrentFileData {
             total_amount_pieces,
         })
     }
+
     ///Funcion que devuelve true si el Torrent representado es Single File y false si es Multiple File
     pub fn is_single_file(&self) -> bool {
         self.is_single_file
     }
+
     ///Funcion que devuelve la url del tracker principal del Torrent
     pub fn get_tracker_main(&self) -> String {
         self.url_tracker_main.clone()
     }
+
     ///Funcion que devuelve el campo name del Torrent.
     ///
     /// Este valor varia dependiendo del tipo de Torrent que es, en caso de ser single file, este sera
@@ -246,28 +250,34 @@ impl TorrentFileData {
     pub fn get_name(&self) -> String {
         self.name.clone()
     }
+
     ///Funcion que va a devolver el info_hash, que es el campo info del .torrent bencodeado y encriptado mediante
     /// SHA-1
     pub fn get_info_hash(&self) -> Vec<u8> {
         self.info_hash.clone()
     }
+
     ///Funcion que devuelve el tamaño total de todos los archivos
     pub fn get_total_size(&self) -> i64 {
         self.total_size
     }
+
     ///Funcion que devuelve el largo que van a tener las piezas
     pub fn get_piece_length(&self) -> i64 {
         self.piece_length
     }
+
     ///Funcion que devuelve la cantidad total de piezas que va a tener el archivo
     pub fn get_total_amount_pieces(&self) -> usize {
         self.total_amount_pieces
     }
+
     ///Funcion que va a devolver los path de los archivos [Solo se utiliza en caso de que el torrent
     /// sea multiple file]
     pub fn get_paths(&self) -> Vec<String> {
         self.path.clone()
     }
+
     ///Funcion que dado el numero de pieza devuelve su encriptacion en SHA-1
     pub fn get_piece_sha1(&self, piece_index: usize) -> Vec<u8> {
         let mut pieces_return = vec![];

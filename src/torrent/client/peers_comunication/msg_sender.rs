@@ -1,12 +1,13 @@
-#![allow(dead_code)]
-use crate::torrent::client::client_struct::*;
-use crate::torrent::parsers::{
-    p2p, p2p::constants::PSTR_STRING_HANDSHAKE, p2p::message::P2PMessage,
+//! # Modulo de envio de mensajes P2P
+//! Este modulo contiene las funciones encargadas de enviar mensajes P2P en sockets, los cuales deben enviarse en bytes correspondientes al protocolo BitTorrent para comunicación entre peers
+//!
+
+use crate::torrent::{
+    client::client_struct::*,
+    parsers::{p2p, p2p::constants::PSTR_STRING_HANDSHAKE, p2p::message::P2PMessage},
 };
 use core::fmt;
-use std::error::Error;
-use std::io::Write;
-use std::net::TcpStream;
+use std::{error::Error, io::Write, net::TcpStream};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum MsgSenderError {
@@ -27,12 +28,10 @@ impl fmt::Display for MsgSenderError {
 
 impl Error for MsgSenderError {}
 
-/* FALTA:
- * - Documentar
- */
-
 const MAX_BLOCK_BYTES: u32 = 131072; //2^17 bytes
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Handshake
+///
 pub fn send_handshake(client_peer: &Client, stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     let handshake_bytes = p2p::encoder::to_bytes(P2PMessage::Handshake {
         protocol_str: PSTR_STRING_HANDSHAKE.to_string(), //esto capaz deberia ser un campo del cliente
@@ -57,26 +56,32 @@ fn send_msg(stream: &mut TcpStream, msg_variant: P2PMessage) -> Result<(), MsgSe
     Ok(())
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Keep Alive
 pub fn send_keep_alive(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::KeepAlive)
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Choke
 pub fn send_choke(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::Choke)
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Unchoke
 pub fn send_unchoke(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::Unchoke)
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Interested
 pub fn send_interested(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::Interested)
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Not Interested
 pub fn send_not_interested(stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     send_msg(stream, P2PMessage::NotInterested)
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Have
 pub fn send_have(stream: &mut TcpStream, completed_piece_index: u32) -> Result<(), MsgSenderError> {
     let have_msg = P2PMessage::Have {
         piece_index: completed_piece_index,
@@ -84,6 +89,7 @@ pub fn send_have(stream: &mut TcpStream, completed_piece_index: u32) -> Result<(
     send_msg(stream, have_msg)
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Bitfield
 pub fn send_bitfield(client_peer: &Client, stream: &mut TcpStream) -> Result<(), MsgSenderError> {
     let bitfield_msg = P2PMessage::Bitfield {
         bitfield: client_peer.data_of_download.pieces_availability.clone(),
@@ -106,6 +112,7 @@ fn check_request_or_cancel_fields(amount_of_bytes: u32) -> Result<(), MsgSenderE
     Ok(())
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Request
 pub fn send_request(
     stream: &mut TcpStream,
     piece_index: u32,
@@ -140,6 +147,7 @@ fn check_piece_fields(block: &[u8]) -> Result<(), MsgSenderError> {
     Ok(())
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Piece
 pub fn send_piece(
     stream: &mut TcpStream,
     piece_index: u32,
@@ -155,6 +163,7 @@ pub fn send_piece(
     send_msg(stream, piece_msg)
 }
 
+/// Funcion encargada de codificar y enviar un mensaje P2P de tipo Cancel
 pub fn send_cancel(
     stream: &mut TcpStream,
     piece_index: u32,
@@ -173,34 +182,35 @@ pub fn send_cancel(
 #[cfg(test)]
 mod test_msg_sender {
     use super::*;
-    use crate::torrent::client::peers_comunication::msg_receiver::receive_message;
-    use crate::torrent::data::data_of_download::{DataOfDownload, StateOfDownload};
-    use crate::torrent::data::torrent_file_data::TorrentFileData;
-    use crate::torrent::data::tracker_response_data::{
-        PeerDataFromTrackerResponse, TrackerResponseData,
-    };
-    use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
-    use crate::torrent::parsers::p2p::constants::TOTAL_NUM_OF_BYTES_HANDSHAKE;
-    use crate::torrent::parsers::{p2p, p2p::message::P2PMessage};
     use crate::torrent::{
-        data::peer_data_for_communication::PeerDataForP2PCommunication,
-        parsers::p2p::message::PieceStatus,
+        client::peers_comunication::msg_receiver::receive_message,
+        data::{
+            data_of_download::{DataOfDownload, StateOfDownload},
+            peer_data_for_communication::PeerDataForP2PCommunication,
+            torrent_file_data::TorrentFileData,
+            tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
+        },
+        parsers::p2p::{
+            self,
+            constants::{PSTR_STRING_HANDSHAKE, TOTAL_NUM_OF_BYTES_HANDSHAKE},
+            message::{P2PMessage, PieceStatus},
+        },
     };
-    //use std::collections::HashMap;
-    use std::error::Error;
-    use std::io::Read;
-    use std::net::{SocketAddr, TcpListener};
-    use std::str::FromStr;
-    use std::vec;
+
+    use std::{
+        error::Error,
+        io::Read,
+        net::{SocketAddr, TcpListener},
+        str::FromStr,
+    };
 
     pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
     pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
     pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
-    pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
     pub const DEFAULT_INFO_HASH: [u8; 20] = [0; 20];
 
-    //
-    // AUX PARA CONEXIONES:
+    ///==========================================
+    //FUNCIONES AUXILIARES:
     use std::io::ErrorKind;
     const LOCALHOST: &str = "127.0.0.1";
     const STARTING_PORT: u16 = 8080;
@@ -302,6 +312,8 @@ mod test_msg_sender {
             list_of_peers_data_for_communication,
         })
     }
+
+    //==========================================
 
     #[test]
     fn client_peer_send_a_handshake_ok() -> Result<(), Box<dyn Error>> {

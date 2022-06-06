@@ -1,9 +1,9 @@
 //! # Modulo de Values
 //! Este modulo contiene el enumerado con los valores utilizados en el Bencoding
 
-///Enumerado de los distintos tipos que puede haber en el bencoding
 use std::{collections::HashMap, error::Error, fmt};
 
+///Enumerado de los distintos tipos que puede haber en el bencoding
 #[derive(PartialEq, Debug, Clone)]
 pub enum ValuesBencoding {
     String(Vec<u8>),

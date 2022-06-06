@@ -1,4 +1,6 @@
-#![allow(dead_code)]
+//! # Modulo de recepcion de mensajes P2P
+//! Este modulo contiene las funciones encargadas de recibir mensajes P2P provenientes de sockets, los cuales llegan en bytes correspondientes al protocolo BitTorrent para comunicación entre peers
+//!
 
 use crate::torrent::parsers::p2p::{
     self, constants::TOTAL_NUM_OF_BYTES_HANDSHAKE, message::P2PMessage,
@@ -7,6 +9,7 @@ use core::fmt;
 use std::{error::Error, io::Read, net::TcpStream};
 
 #[derive(PartialEq, Debug)]
+/// Representa un tipo de error en la recepcion de mensajes P2P
 pub enum MsgReceiverError {
     InternalParsing(String),
     ReadingFromTcpStream(String),
@@ -20,11 +23,7 @@ impl fmt::Display for MsgReceiverError {
 
 impl Error for MsgReceiverError {}
 
-/* FALTA:
- * - Documentar
- */
-
-///
+/// Funcion encargada de recibir e interpretar un mensaje P2P de tipo Handshake
 ///
 pub fn receive_handshake(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiverError> {
     let mut buffer = [0; TOTAL_NUM_OF_BYTES_HANDSHAKE].to_vec();
@@ -73,6 +72,9 @@ fn build_msg(
 }
 
 ///
+/// Funcion encargada de recibir e interpretar un mensaje P2P en general,
+/// exceptuando el Handshake (esto se debe a que tiene un formato distinto
+/// a los demas mensajes)
 ///
 pub fn receive_message(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiverError> {
     let mut buffer_lenght_prefix = [0; 4].to_vec();
@@ -84,8 +86,7 @@ pub fn receive_message(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiver
 mod test_msg_receiver {
     use super::*;
     use crate::torrent::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
-    use std::error::Error;
-    use std::{io::Write, net::TcpListener};
+    use std::{error::Error, io::Write, net::TcpListener};
 
     //
     // AUX PARA CONEXIONES:
@@ -93,6 +94,9 @@ mod test_msg_receiver {
     const LOCALHOST: &str = "127.0.0.1";
     const STARTING_PORT: u16 = 8080;
     const MAX_TESTING_PORT: u16 = 9080;
+
+    //==========================================
+    //FUNCIONES AUXILIARES PARA BUSQUEDA DE PUERTOS EN TESTS:
 
     #[derive(PartialEq, Debug)]
     enum PortBindingError {
@@ -106,12 +110,6 @@ mod test_msg_receiver {
     }
 
     impl Error for PortBindingError {}
-
-    pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
-    pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
-    pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
-    pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
-    pub const DEFAULT_INFO_HASH: [u8; 20] = [0; 20];
 
     fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
         let mut new_port: u16 = current_port;
@@ -146,7 +144,7 @@ mod test_msg_receiver {
     }
 
     //
-    //
+    //==========================================
 
     mod test_receive_handshake {
         use std::time::Duration;

@@ -1,8 +1,8 @@
-#![allow(dead_code)]
 use std::{error::Error, fmt};
 
 #[derive(PartialEq, Debug, Clone)]
 /// Representa el estado de una pieza para uso en mensaje P2P Bitfield
+/// (Teniendo un vector de PieceStatuses se puede representar el Bitfield de forma comoda)
 pub enum PieceStatus {
     ValidAndAvailablePiece,
     PartiallyDownloaded { downloaded_bytes: u32 },
@@ -10,7 +10,8 @@ pub enum PieceStatus {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-/// Representa un mensaje de comunicación P2P.
+/// Representa un mensaje en general de comunicación P2P, donde cada variante es un mensaje distinto con
+/// información asociada.
 pub enum P2PMessage {
     KeepAlive,
     Choke,

@@ -1,53 +1,34 @@
-#![allow(dead_code)]
+//! # Modulo de manejo de comunicacion con Tracker
+//! Este modulo contiene las funciones encargadas de envio, recepcion,
+//! interpretación y almacenamiento de información obtenida de comunicación
+//! con un tracker correspondiente a un .torrent
+//!
+
 extern crate sha1;
 
 use native_tls::{TlsConnector, TlsStream};
 
-use crate::torrent::data::torrent_file_data::TorrentFileData;
-use crate::torrent::parsers::bencoding;
-use crate::torrent::parsers::bencoding::values::ValuesBencoding;
-use crate::torrent::parsers::url_encoder;
+use super::constants::*;
+use crate::torrent::{
+    data::torrent_file_data::TorrentFileData,
+    parsers::{
+        bencoding::{self, values::ValuesBencoding},
+        url_encoder,
+    },
+};
 use log::{debug, error, trace};
-use std::collections::HashMap;
-use std::error::Error;
-use std::fmt;
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt,
+    io::{Read, Write},
+    net::TcpStream,
+};
 
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 type ResultMsg<T> = Result<T, ErrorMsgHttp>;
 
-const ONE: usize = 1;
-const TWO: usize = 2;
-const FOUR: usize = 4;
-
-const LAST_SLASH: &[u8; ONE] = b"/";
-const TWO_SLASH: &[u8; TWO] = b"//";
-const TWO_POINTS: &[u8; ONE] = b":";
-const END_LINE: &[u8; TWO] = b"\r\n";
-const DOUBLE_END_LINE: &[u8; FOUR] = b"\r\n\r\n";
-
-const INIT_MSG: &str = "GET /announce";
-const INFO: &str = "info";
-const INFO_HASH: &str = "?info_hash=";
-const PEER_ID: &str = "&peer_id=";
-const IP: &str = "&ip=";
-const PORT: &str = "&port=";
-const UPLOADED: &str = "&uploaded=";
-const DOWNLOADED: &str = "&downloaded=";
-//const COMPACT: &str = "&compact=";
-const LEFT: &str = "&left=";
-const EVENT: &str = "&event=";
-const HTTP: &str = " HTTP/1.0\r\n";
-const HOST: &str = "Host:";
-const MSG_ENDING: &str = "\r\n\r\n";
-
-const IP_CLIENT: &str = "127.0.0.1";
-const PORT_CLIENT: &str = ":443";
-const STARTED: &str = "started";
-const INIT_PORT: u32 = 6881;
-
-///Enumerado que representa los tipos de error que pueden surgir
+///Enumerado que representa los tipos de error que pueden surgir en comunicación con tracker
 #[derive(Debug, PartialEq)]
 pub enum ErrorMsgHttp {
     NoAnnounce,
@@ -80,7 +61,6 @@ struct MsgDescriptor {
     uploaded: u64,
     downloaded: u64,
     left: u64,
-    //[POR HACER: Ver como hacer para recibir respuestas compactas]
     //compact: u8,
     event: String,
     host: String,
@@ -95,7 +75,7 @@ fn find_index_msg(response: &[u8], size: usize, end_line: &[u8]) -> Option<usize
 }
 
 fn init_info_hash(vec_sha1: Vec<u8>) -> String {
-    let info_hash = url_encoder::from_string(vec_sha1);
+    let info_hash = url_encoder::from_string_bytes(vec_sha1);
     vec_u8_to_string(&info_hash)
 }
 
@@ -208,15 +188,15 @@ impl MsgDescriptor {
     /// validos son del 6881 al 6889 si el cambio es exitoso devolvera Ok(()), en caso de llegar al
     /// ultimo puerto valido y querer volver a cambiar se devolvera un error y el puerto volvera a setearse
     /// al primer puerto valido.
-    pub fn change_port(&mut self) -> Result<(), ErrorMsgHttp> {
-        if self.port == 6889 {
-            self.port = 6881;
-            Err(ErrorMsgHttp::NoMorePorts)
-        } else {
-            self.port += 1;
-            Ok(())
-        }
-    }
+    // pub fn change_port(&mut self) -> Result<(), ErrorMsgHttp> {
+    //     if self.port == 6889 {
+    //         self.port = 6881;
+    //         Err(ErrorMsgHttp::NoMorePorts)
+    //     } else {
+    //         self.port += 1;
+    //         Ok(())
+    //     }
+    // }
     ///Funcion que actualiza los valores de downloaded, uploaded y left
     pub fn update_download_stats(&mut self, more_down: u64, more_up: u64) {
         self.downloaded += more_down;
@@ -242,6 +222,9 @@ impl MsgDescriptor {
     }
 }
 
+//=================================================================
+
+// Struct que representa un manejador general de comunicacion Http con un tracker especifico
 pub struct HttpHandler {
     msg_get: MsgDescriptor,
 }
@@ -256,18 +239,22 @@ impl HttpHandler {
             msg_get: MsgDescriptor::new(torrent, peer_id)?,
         })
     }
+
     ///Devuelve el host del mensaje al tracker
     pub fn get_host(&self) -> String {
         self.msg_get.get_host()
     }
+
     ///Devuelve el mensaje de request que debe ser enviado al tracker
     pub fn get_send_msg(&self) -> ResultMsg<String> {
         self.msg_get.get_send_msg()
     }
+
     ///Funcion que actualiza los estados de downloaded, uploaded y left del MsgDescriptor almacenado
     pub fn update_download_stats(&mut self, more_down: u64, more_up: u64) {
         self.msg_get.update_download_stats(more_down, more_up)
     }
+
     ///Funcion que sirve para conectarse con el tracker correspondiente, en caso de que alguna de las conexiones
     /// falle se devolvera el error correspondiente
     pub fn connect(&self) -> ResultMsg<TlsStream<TcpStream>> {
@@ -351,6 +338,7 @@ impl HttpHandler {
             None => Err(ErrorMsgHttp::FormatResponseError),
         }
     }
+
     ///Funcion en la que le pedimos al HttpHandler que se conecte con el tracker, le envie el request
     /// correspondiente y luego nos devuelva la respuesta en formato de HashMap.
     ///

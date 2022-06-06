@@ -1,4 +1,8 @@
-use std::vec;
+//! # Modulo de encodificacion P2P
+//! Este modulo contiene las funciones encargadas de realizar el encoding de mensajes P2P proveniente de NUESTRO uso de la
+//! estructura P2PMessage (Ver modulo message en super-modulo 'p2p'), para convertir dicha estructura a bytes de tal
+//! forma de poder realizar la logica necesaria de envío de mensajes y que otros peers puedan interpretar dichos mensajes.
+//!  
 
 use super::{constants::*, message::*};
 
@@ -337,17 +341,17 @@ fn encode_handshake(
 ///   al intentar encodear el mensaje dicho string TIENE que ser "BitTorrent protocol". Si esto no se cumple entonces
 ///   el valor de retorno es la variante Err. (Esto es para evitar posibles fallas involuntarias).
 ///
-/// # Ejemplo de uso:
-///
-/// ```no_run
-/// # use fa_torrent::torrent::parsers::p2p;
-/// # use fa_torrent::torrent::parsers::p2p::message::*;
-/// // Crea un mensaje Request en el que pide la pieza de indice 3, de la cual pide a
-/// // partir el byte de indice 2*(...), y solucita un bloque de longitud 16KB:
-/// let request = P2PMessage::Request {piece_index: 3, beginning_byte_index: 2*(2u32.pow(14)) , amount_of_bytes: 2u32.pow(14)};
-/// let request_bytes = p2p::encoder::to_bytes(request);
-/// // ... para posteriormente neviarle estos bytes a otro peer a traves de un socket.
-/// ```
+// # Ejemplo de uso:
+//
+// ```no_run
+// # use fa_torrent::torrent::parsers::p2p;
+// # use fa_torrent::torrent::parsers::p2p::message::*;
+// // Crea un mensaje Request en el que pide la pieza de indice 3, de la cual pide a
+// // partir el byte de indice 2*(...), y solucita un bloque de longitud 16KB:
+// let request = P2PMessage::Request {piece_index: 3, beginning_byte_index: 2*(2u32.pow(14)) , amount_of_bytes: 2u32.pow(14)};
+// let request_bytes = p2p::encoder::to_bytes(request);
+// // ... para posteriormente neviarle estos bytes a otro peer a traves de un socket.
+// ```
 ///
 pub fn to_bytes(p2p_msg: P2PMessage) -> Result<Vec<u8>, P2PMessageEncodingError> {
     match p2p_msg {

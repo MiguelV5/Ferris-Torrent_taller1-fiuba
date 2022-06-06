@@ -1,3 +1,7 @@
+//! # Modulo de decodificacion P2P
+//! Este modulo contiene las funciones encargadas de decodificar mensajes P2P provenientes de sockets, los cuales llegan en bytes
+//! y deben ser interpretados para realizar la logica necesaria de recepcion de mensajes.
+
 use super::constants::*;
 use super::message::*;
 
@@ -237,21 +241,21 @@ fn determinate_p2p_msg(
 /// - El Ok value es una variante de P2PMessage segun sea adecuado tras interpretar los bytes.
 /// - El Err value es una variante de P2PMessageDecodingError si no se pudo interpretar el mensaje.
 ///
-/// # Ejemplo de uso básico:
-///
-/// ```
-/// # use fa_torrent::torrent::parsers::p2p;
-/// # use fa_torrent::torrent::parsers::p2p::message::*;
-/// let p2p_msg_bytes = [0, 0, 0, 13, 6, 0, 0, 0, 10, 0, 0, 0, 5, 0, 0, 0, 3];
-/// assert_eq!(
-///     Ok(P2PMessage::Request {
-///         piece_index: 10,
-///         beginning_byte_index: 5,
-///         amount_of_bytes: 3
-///     }),
-///     p2p::decoder::from_bytes(&p2p_msg_bytes)
-/// );
-/// ```
+// # Ejemplo de uso básico:
+//
+// ```
+// # use fa_torrent::torrent::parsers::p2p;
+// # use fa_torrent::torrent::parsers::p2p::message::*;
+// let p2p_msg_bytes = [0, 0, 0, 13, 6, 0, 0, 0, 10, 0, 0, 0, 5, 0, 0, 0, 3];
+// assert_eq!(
+//     Ok(P2PMessage::Request {
+//         piece_index: 10,
+//         beginning_byte_index: 5,
+//         amount_of_bytes: 3
+//     }),
+//     p2p::decoder::from_bytes(&p2p_msg_bytes)
+// );
+// ```
 ///
 pub fn from_bytes(bytes: &[u8]) -> Result<P2PMessage, P2PMessageDecodingError> {
     if bytes.len() < MIN_BYTES_OF_A_P2P_MSG {

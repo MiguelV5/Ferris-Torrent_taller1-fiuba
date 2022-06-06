@@ -1,14 +1,14 @@
 //! # Modulo de encoder de Bencoding
 //! Este Modulo va a servir para pasar un String/Integer/List/Dic al formato Bencoding
 //!  el cual sera representado por un String
-#![allow(dead_code)]
+
 use super::constants::*;
 use super::values::ValuesBencoding;
 use std::collections::HashMap;
 
 ///Esta funcion devuelve un String en el formato Bencoding
 ///  del String que se le haya pasado
-pub fn from_string(to_bencode: Vec<u8>) -> Vec<u8> {
+fn from_string(to_bencode: Vec<u8>) -> Vec<u8> {
     let mut to_bencode = to_bencode;
     let mut bencoding = vec![];
     let long_number = to_bencode.len() as u32;
@@ -21,7 +21,7 @@ pub fn from_string(to_bencode: Vec<u8>) -> Vec<u8> {
     bencoding
 }
 ///Esta funcion devuelve un String del formato Bencoding del integer pasado
-pub fn from_integer(to_bencode: i64) -> Vec<u8> {
+fn from_integer(to_bencode: i64) -> Vec<u8> {
     let mut bencoding = vec![CHAR_I];
     let mut num_string = to_bencode.to_string().as_bytes().to_vec();
     bencoding.append(&mut num_string);
@@ -31,7 +31,7 @@ pub fn from_integer(to_bencode: i64) -> Vec<u8> {
 }
 
 ///Esta funcion devuelve un String del formato Bencoding de la lista ([Vec]) pasada
-pub fn from_list(to_bencode: Vec<ValuesBencoding>) -> Vec<u8> {
+fn from_list(to_bencode: Vec<ValuesBencoding>) -> Vec<u8> {
     let mut bencoding = vec![CHAR_L];
     let iterator = to_bencode.into_iter();
 

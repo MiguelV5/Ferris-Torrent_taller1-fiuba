@@ -1,8 +1,13 @@
-#![allow(dead_code)]
+//! # Modulo de manejo de comunicación con peers
+//! Este modulo contiene las funciones encargadas de controlar la logica de conexion e interaccion con todos los peers necesarios.
+//!
+
 use super::super::client_struct::Client;
 use super::msg_logic_control::{interact_with_single_peer, MsgLogicControlError};
 use std::fs;
 
+/// Representa un tipo de estado de interaccion para saber si se debe
+/// continuar o finalizar la misma
 pub enum HandlerInteractionStatus {
     LookForAnotherPeer,
     FinishInteraction,
@@ -20,12 +25,16 @@ fn flush_data(client: &mut Client) -> Result<(), MsgLogicControlError> {
     Ok(())
 }
 
+// FUNCION PRINCIPAL
+/// Funcion encargada de manejar toda conexion y comunicación con todos los
+/// peers que se hayan obtenido a partir de una respuesta de tracker e info
+/// adicional del archivo .torrent correspondiente.
+///
+/// POR AHORA finaliza la comunicación cuando puede completar una pieza completa,
+/// o en caso de error interno.
+///
 pub fn handle_general_interaction(client: &mut Client) -> Result<(), MsgLogicControlError> {
-    // LOGICA PARA GENERALIZAR CUANDO HAYA MAS DE UN PEER:
-
-    //...
-
-    // POR AHORA; MIENTRAS QUE SE REQUIERE SOLO UN PEER A COMPLETAR UNA PIEZA:
+    // POR AHORA; LOGICA PARA COMPLETAR UNA PIEZA:
     let mut current_server_peer_index = 0;
 
     loop {
@@ -61,6 +70,8 @@ pub fn handle_general_interaction(client: &mut Client) -> Result<(), MsgLogicCon
         };
     }
 }
+
+// =================================================================================================================
 
 //
 // LOGICA PARA GENERALIZAR CUANDO HAYA MAS DE UN PEER:

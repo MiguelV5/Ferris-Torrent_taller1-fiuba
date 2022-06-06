@@ -1,13 +1,13 @@
-#![allow(dead_code)]
-use crate::torrent::parsers::bencoding;
-use crate::torrent::parsers::bencoding::values::{ErrorBencoding, ValuesBencoding};
+//! # Modulo de analisis de metadata
+//! Este modulo contiene las funciones encargadas de leer, analizar e interpretar
+//! la metadata de un archivo .torrent para su posterior uso.
+
+use crate::torrent::parsers::bencoding::{
+    self,
+    values::{ErrorBencoding, ValuesBencoding},
+};
 use log::error;
-use std::collections::HashMap;
-use std::error::Error;
-use std::ffi::OsStr;
-use std::fmt;
-use std::io::Read;
-use std::{fs::File, path::Path};
+use std::{collections::HashMap, error::Error, ffi::OsStr, fmt, fs::File, io::Read, path::Path};
 
 type ResultMetadata<T> = Result<T, MetadataError>;
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
@@ -15,6 +15,7 @@ type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 const TORRENT: &str = "torrent";
 
 #[derive(Debug, PartialEq)]
+/// Representa un error al analizar la metadata
 pub enum MetadataError {
     FileNotFound,
     IsNotTorrent,
@@ -35,7 +36,8 @@ impl fmt::Display for MetadataError {
 impl Error for MetadataError {}
 
 /// Se encarga de leer la información del .torrent
-/// Devuelve un String con la información del archivo leído, y se encuentra en formato Bencoding
+/// Devuelve los bytes correspondientes a un String con la información del
+/// archivo leído, y se encuentra en formato Bencoding
 ///
 pub fn read_torrent_file(filename: &str) -> ResultMetadata<Vec<u8>> {
     if !check_filename_extension_is_torrent(filename) {
@@ -60,6 +62,8 @@ pub fn read_torrent_file(filename: &str) -> ResultMetadata<Vec<u8>> {
     Ok(bytes_vec)
 }
 
+/// Funcion que se encarga de leer un archivo .torrent e interpretar su info
+/// para traducirla de Bencoding a un HashMap
 pub fn read_torrent_file_to_dic(filename: &str) -> ResultMetadata<DicValues> {
     let metadata = read_torrent_file(filename)?;
     match bencoding::decoder::from_torrent_to_dic(metadata) {
@@ -140,9 +144,4 @@ mod tests {
         let metadata = read_torrent_file(file_dir);
         assert_eq!(metadata, Err(MetadataError::IsNotTorrent))
     }
-
-    // Creo que a partir de aca podriamos hacer tests de integracion en un directorio tests en la raiz del proyecto;
-    // más que nada porque podriamos testear la lectura del .torrent + su decodificacion a Diccionario.
-    // En ese sentido creo que un mejor nombre para este archivo si seria algo de tipo metadata_analyzer como habia propuesto Erick antes,
-    // pues aca falta toda esa logica de decodificacion y etc. (Ahí se lo cambié:  metadata_reader --> metadata_analyzer)
 }
