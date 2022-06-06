@@ -135,10 +135,8 @@ fn add_description_msg(msg: &mut String, type_msg: &str, value: String) {
 impl MsgDescriptor {
     ///Funcion que va a crear un MsgDescriptor, la cual necesita para crearse un TorrentFileData y
     /// un peer_id, esta estructura va a servir para crear el mensaje de request al tracker
-    pub fn new(torrent: TorrentFileData, id: String) -> ResultMsg<Self> {
+    pub fn new(torrent: TorrentFileData, peer_id: String) -> ResultMsg<Self> {
         let info_hash = init_info_hash(torrent.get_info_hash());
-        //Cuando este el generador de Peer_Id se lo podria pasar por parametro e ingresarlo aca
-        let peer_id = id;
         let ip = String::from(IP_CLIENT);
         let port = INIT_PORT;
         let uploaded = 0;

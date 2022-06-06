@@ -183,13 +183,6 @@ mod test_msg_sender {
     use crate::torrent::parsers::p2p::constants::TOTAL_NUM_OF_BYTES_HANDSHAKE;
     use crate::torrent::parsers::{p2p, p2p::message::P2PMessage};
     use crate::torrent::{
-        client::peers_comunication::msg_logic_control::{
-            DEFAULT_ADDR,
-            DEFAULT_CLIENT_PEER_ID,
-            DEFAULT_INFO_HASH,
-            DEFAULT_SERVER_PEER_ID,
-            //DEFAULT_TRACKER_ID,
-        },
         data::peer_data_for_communication::PeerDataForP2PCommunication,
         parsers::p2p::message::PieceStatus,
     };
@@ -199,6 +192,12 @@ mod test_msg_sender {
     use std::net::{SocketAddr, TcpListener};
     use std::str::FromStr;
     use std::vec;
+
+    pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
+    pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
+    pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
+    pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
+    pub const DEFAULT_INFO_HASH: [u8; 20] = [0; 20];
 
     //
     // AUX PARA CONEXIONES:
@@ -254,7 +253,6 @@ mod test_msg_sender {
 
     //
     //
-
     fn create_default_client_peer_with_a_server_peer_that_has_one_piece(
     ) -> Result<Client, Box<dyn Error>> {
         let server_peer = PeerDataFromTrackerResponse {

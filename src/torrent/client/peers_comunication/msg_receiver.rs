@@ -4,14 +4,12 @@ use crate::torrent::parsers::p2p::{
     self, constants::TOTAL_NUM_OF_BYTES_HANDSHAKE, message::P2PMessage,
 };
 use core::fmt;
-use std::{error::Error, io::Read, net::TcpStream, time::Duration};
+use std::{error::Error, io::Read, net::TcpStream};
 
 #[derive(PartialEq, Debug)]
 pub enum MsgReceiverError {
     InternalParsing(String),
-    ReceivingHanshake(String),
-    ReceivingMessage(String),
-    ReceivingLenghtPrefix(String),
+    ReadingFromTcpStream(String),
 }
 
 impl fmt::Display for MsgReceiverError {
@@ -24,22 +22,52 @@ impl Error for MsgReceiverError {}
 
 /* FALTA:
  * - Documentar
- * - Ver el tema del tiempo a la hora de leer
  */
 
 ///
 ///
 pub fn receive_handshake(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiverError> {
-    stream
-        .set_read_timeout(Some(Duration::new(0, 1)))
-        .map_err(|err| MsgReceiverError::ReceivingHanshake(format!("{:?}", err)))?; //ver este tiempo porque capaz tiene que ser seteado desde afuera
-
     let mut buffer = [0; TOTAL_NUM_OF_BYTES_HANDSHAKE].to_vec();
     stream
         .read_exact(&mut buffer)
-        .map_err(|error| MsgReceiverError::ReceivingHanshake(format!("{:?}", error)))?;
+        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{:?}", error)))?;
 
     let message = p2p::decoder::from_bytes(&buffer)
+        .map_err(|err| MsgReceiverError::InternalParsing(format!("{:?}", err)))?;
+    Ok(message)
+}
+
+fn receive_lenght_prefix(
+    stream: &mut TcpStream,
+    buffer_lenght_prefix: &mut [u8],
+) -> Result<usize, MsgReceiverError> {
+    stream
+        .read_exact(buffer_lenght_prefix)
+        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{:?}", error)))?;
+
+    let lenght_prefix_value = p2p::decoder::concatenate_bytes_into_u32(&*buffer_lenght_prefix)
+        .map_err(|err| MsgReceiverError::InternalParsing(format!("{:?}", err)))?;
+    lenght_prefix_value
+        .try_into()
+        .map_err(|err| MsgReceiverError::InternalParsing(format!("{:?}", err)))
+}
+
+fn build_msg(
+    stream: &mut TcpStream,
+    buffer_lenght_prefix: Vec<u8>,
+    lenght_prefix_value: usize,
+) -> Result<P2PMessage, MsgReceiverError> {
+    let mut buffer_msg = Vec::with_capacity(lenght_prefix_value);
+    buffer_msg.resize_with(lenght_prefix_value, Default::default);
+
+    stream
+        .read_exact(&mut buffer_msg)
+        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{:?}", error)))?;
+
+    let mut bytes = buffer_lenght_prefix;
+    bytes.append(&mut buffer_msg);
+
+    let message = p2p::decoder::from_bytes(&bytes)
         .map_err(|err| MsgReceiverError::InternalParsing(format!("{:?}", err)))?;
     Ok(message)
 }
@@ -47,37 +75,9 @@ pub fn receive_handshake(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiv
 ///
 ///
 pub fn receive_message(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiverError> {
-    //falta modularizacion en la funcion pero ya funciona todo correctamente
-    stream
-        .set_read_timeout(Some(Duration::new(0, 1)))
-        .map_err(|err| MsgReceiverError::ReceivingMessage(format!("{:?}", err)))?; //ver este tiempo porque capaz tiene que ser seteado desde afuera
-
-    // LEO LENGHT PREFIX
     let mut buffer_lenght_prefix = [0; 4].to_vec();
-    stream
-        .read_exact(&mut buffer_lenght_prefix)
-        .map_err(|error| MsgReceiverError::ReceivingLenghtPrefix(format!("{:?}", error)))?;
-
-    //GENERO EL VALOR DEL LENGHT PREFIX
-    let lenght_prefix_value = p2p::decoder::concatenate_bytes_into_u32(&buffer_lenght_prefix)
-        .map_err(|err| MsgReceiverError::ReceivingMessage(format!("{:?}", err)))?; //ver si esa funcion realmente debe estar en el parser
-    let lenght_prefix_value = u32::try_into(lenght_prefix_value)
-        .map_err(|err| MsgReceiverError::ReceivingMessage(format!("{:?}", err)))?; // (Miguel): (Ver primero nota de client_struct.rs) lo cambié de MsgReceiverError::FromU32ToUSizeError a esto. En general como estamos encapsulandolos ya queda adentro la info de qué fue exactamente el error, y asi queda más claro de qué funcion del cliente viene.
-
-    // LEO LOS BYTES RESTANTES SEGUN LENGHT PREFIX
-    let mut buffer_msg = Vec::with_capacity(lenght_prefix_value);
-    buffer_msg.resize_with(lenght_prefix_value, Default::default);
-
-    stream
-        .read_exact(&mut buffer_msg)
-        .map_err(|error| MsgReceiverError::ReceivingMessage(format!("{:?}", error)))?;
-
-    let mut bytes = buffer_lenght_prefix;
-    bytes.append(&mut buffer_msg);
-
-    let message = p2p::decoder::from_bytes(&bytes)
-        .map_err(|err| MsgReceiverError::ReceivingMessage(format!("{:?}", err)))?;
-    Ok(message)
+    let lenght_prefix_value = receive_lenght_prefix(stream, &mut buffer_lenght_prefix)?;
+    build_msg(stream, buffer_lenght_prefix, lenght_prefix_value)
 }
 
 #[cfg(test)]
@@ -106,6 +106,12 @@ mod test_msg_receiver {
     }
 
     impl Error for PortBindingError {}
+
+    pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
+    pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
+    pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
+    pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
+    pub const DEFAULT_INFO_HASH: [u8; 20] = [0; 20];
 
     fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
         let mut new_port: u16 = current_port;
@@ -143,6 +149,8 @@ mod test_msg_receiver {
     //
 
     mod test_receive_handshake {
+        use std::time::Duration;
+
         use super::*;
 
         #[test]
@@ -180,6 +188,7 @@ mod test_msg_receiver {
             buffer.pop();
             sender_stream.write(&buffer)?;
 
+            receptor_stream.set_read_timeout(Some(Duration::new(1, 0)))?;
             assert!(receive_handshake(&mut receptor_stream).is_err());
             Ok(())
         }
@@ -200,12 +209,15 @@ mod test_msg_receiver {
             buffer[0] = 0; //cambio el campo pstrlen del handshake por cero.
             sender_stream.write(&buffer)?;
 
+            receptor_stream.set_read_timeout(Some(Duration::new(1, 0)))?;
             assert!(receive_handshake(&mut receptor_stream).is_err());
             Ok(())
         }
     }
 
     mod test_receive_message {
+        use std::time::Duration;
+
         use super::*;
 
         #[test]
@@ -292,6 +304,7 @@ mod test_msg_receiver {
             buffer.pop();
             sender_stream.write(&buffer)?;
 
+            receptor_stream.set_read_timeout(Some(Duration::new(1, 0)))?;
             assert!(receive_message(&mut receptor_stream).is_err());
 
             Ok(())

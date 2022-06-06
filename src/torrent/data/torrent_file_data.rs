@@ -269,14 +269,14 @@ impl TorrentFileData {
         self.path.clone()
     }
     ///Funcion que dado el numero de pieza devuelve su encriptacion en SHA-1
-    pub fn get_piece_sha1(&self, id_piece: usize) -> Vec<u8> {
+    pub fn get_piece_sha1(&self, piece_index: usize) -> Vec<u8> {
         let mut pieces_return = vec![];
         let mut long_sha1 = 20;
         let mut iterator = self.pieces.clone().into_iter();
-        if id_piece >= self.get_total_amount_pieces() {
+        if piece_index >= self.get_total_amount_pieces() {
             return pieces_return;
-        } else if id_piece > 0 {
-            let init_pos = (id_piece * long_sha1) - 1;
+        } else if piece_index > 0 {
+            let init_pos = (piece_index * long_sha1) - 1;
             iterator.nth(init_pos);
         }
         while long_sha1 > 0 {

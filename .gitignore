@@ -11,5 +11,7 @@ Cargo.lock
 
 
 # Added by cargo
-
 /target
+
+# Temp de las piezas:
+/temp/torrent

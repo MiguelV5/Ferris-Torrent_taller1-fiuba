@@ -11,9 +11,14 @@ pub struct PeerDataForP2PCommunication {
     //...
 }
 
-// #[derive(PartialEq, Debug, Clone)]
-// pub struct PeersDataList {
-//     pub total_amount_of_peers: u32,
-//     pub data_list: Vec<PeerDataForP2PCommunication>,
-// }
-// Creo que no es necesario ya que es simplemente un vec con su largo. Recordar que en Rust los Vec tienen la ventaja de calcular su .len() como O(1) porque es un campo de la abstraccion len. Me quede sorprendido cuando lo vi
+impl PeerDataForP2PCommunication {
+    pub fn new(peer_id: Vec<u8>) -> Self {
+        PeerDataForP2PCommunication {
+            pieces_availability: None,
+            peer_id,
+            am_interested: false,
+            am_choking: true,
+            peer_choking: true,
+        }
+    }
+}
