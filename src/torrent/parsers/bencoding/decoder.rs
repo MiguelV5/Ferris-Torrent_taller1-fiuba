@@ -241,10 +241,7 @@ mod tests {
             let return_rest = vec![];
 
             let result = to_string(bencoding_bytes);
-            assert!(result.is_ok());
-            let (str, rest) = result.unwrap();
-            assert_eq!(str, return_str);
-            assert_eq!(rest, return_rest);
+            assert_eq!(result, Ok((return_str, return_rest)));
         }
         #[test]
         fn to_string_ok_rest_valid() {
@@ -254,21 +251,16 @@ mod tests {
             let return_rest = "4:testi32e".as_bytes().to_vec();
 
             let result = to_string(bencoding_bytes);
-            assert!(result.is_ok());
 
-            let (str, rest) = result.unwrap();
-            assert_eq!(str, return_str);
-            assert_eq!(rest, return_rest);
+            assert_eq!(result, Ok((return_str, return_rest)));
 
             let return_str = "test".as_bytes().to_vec();
             let return_rest = "i32e".as_bytes().to_vec();
 
-            let result = to_string(rest);
-            assert!(result.is_ok());
-
-            let (str, rest) = result.unwrap();
-            assert_eq!(str, return_str);
-            assert_eq!(rest, return_rest);
+            if let Ok((_, rest)) = result {
+                let result = to_string(rest);
+                assert_eq!(result, Ok((return_str, return_rest)));
+            }
         }
         #[test]
         fn to_string_error_format() {
@@ -312,11 +304,7 @@ mod tests {
             let return_rest = vec![];
 
             let result = to_integer(bencoding_int);
-            assert!(result.is_ok());
-
-            let (int, rest) = result.unwrap();
-            assert_eq!(int, return_int);
-            assert_eq!(rest, return_rest);
+            assert_eq!(result, Ok((return_int, return_rest)));
         }
         #[test]
         fn to_integer_ok_negative() {
@@ -325,11 +313,7 @@ mod tests {
             let return_rest = vec![];
 
             let result = to_integer(bencoding_int);
-            assert!(result.is_ok());
-
-            let (int, rest) = result.unwrap();
-            assert_eq!(int, return_int);
-            assert_eq!(rest, return_rest);
+            assert_eq!(result, Ok((return_int, return_rest)));
         }
         #[test]
         fn to_integer_ok_rest_valid() {
@@ -338,21 +322,15 @@ mod tests {
             let return_rest = "i-200e4:test".as_bytes().to_vec();
 
             let result = to_integer(bencoding_int);
-            assert!(result.is_ok());
-
-            let (str, rest) = result.unwrap();
-            assert_eq!(str, return_int);
-            assert_eq!(rest, return_rest);
+            assert_eq!(result, Ok((return_int, return_rest)));
 
             let return_int = -200;
             let return_rest = "4:test".as_bytes().to_vec();
 
-            let result = to_integer(rest);
-            assert!(result.is_ok());
-
-            let (str, rest) = result.unwrap();
-            assert_eq!(str, return_int);
-            assert_eq!(rest, return_rest);
+            if let Ok((_, rest)) = result {
+                let result = to_integer(rest);
+                assert_eq!(result, Ok((return_int, return_rest)))
+            }
         }
         #[test]
         fn to_integer_error_format() {
