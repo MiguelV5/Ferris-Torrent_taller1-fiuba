@@ -2,12 +2,18 @@
 //! Este modulo contiene las funciones encargadas de controlar la logica de conexion e interaccion con todos los peers necesarios.
 //!
 
-use super::super::client_struct::Client;
-use super::msg_logic_control::{interact_with_single_peer, MsgLogicControlError};
-use std::ffi::OsStr;
-use std::fs;
-use std::path::Path;
+use log::info;
 
+use crate::torrent::data::{
+    torrent_file_data::TorrentFileData, torrent_status::TorrentStatus,
+    tracker_response_data::TrackerResponseData,
+};
+
+use super::msg_logic_control::MsgLogicControlError;
+use crate::torrent::local_peer::LocalPeer;
+use std::fs;
+
+#[derive(PartialEq, Debug, Clone)]
 /// Representa un tipo de estado de interaccion para saber si se debe
 /// continuar o finalizar la misma
 pub enum HandlerInteractionStatus {
@@ -15,33 +21,39 @@ pub enum HandlerInteractionStatus {
     FinishInteraction,
 }
 
-fn flush_data(client: &mut Client) -> Result<(), MsgLogicControlError> {
-    let torrent_name = &client.torrent_file.name.clone();
-    let path_name = Path::new(torrent_name)
-        .file_stem()
-        .map_or(Some("no_name"), OsStr::to_str)
-        .map_or("pieces_of_no-named_torrent", |name| name);
+/*
+ * Comentarios:
+ * - habria que crear errores para esta estructura
+ */
 
-    let _result = fs::remove_dir_all(format!("temp/{}", path_name))
-        .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)));
-    fs::create_dir(format!("temp/{}", path_name))
-        .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)))?;
-
-    client
-        .data_of_download
-        .flush_data(client.torrent_file.total_size as u64);
+fn set_up_directory(torrent_file_data: &TorrentFileData) -> Result<(), MsgLogicControlError> {
+    info!("Creo un directorio para guardar piezas");
+    let torrent_path = torrent_file_data.get_torrent_representative_name();
+    let _result = fs::remove_dir_all(format!("temp/{}", torrent_path));
+    fs::create_dir(format!("temp/{}", torrent_path))
+        .map_err(|err| MsgLogicControlError::SetUpDirectory(format!("{:?}", err)))?;
     Ok(())
 }
 
-fn remove_all(client: &mut Client) -> Result<(), MsgLogicControlError> {
-    let torrent_name = &client.torrent_file.name.clone();
-    let path_name = Path::new(torrent_name)
-        .file_stem()
-        .map_or(Some("no_name"), OsStr::to_str)
-        .map_or("pieces_of_no-named_torrent", |name| name);
-
-    let _result = fs::remove_dir_all(format!("temp/{}", path_name))
+fn flush_data(
+    torrent_file_data: &TorrentFileData,
+    torrent_status: &mut TorrentStatus,
+) -> Result<(), MsgLogicControlError> {
+    let torrent_path = torrent_file_data.get_torrent_representative_name();
+    let _result = fs::remove_dir_all(format!("temp/{}", torrent_path))
         .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)));
+    fs::create_dir(format!("temp/{}", torrent_path))
+        .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)))?;
+
+    torrent_status.flush_data(torrent_file_data.total_length as u64);
+    Ok(())
+}
+
+fn remove_all(torrent_file_data: &TorrentFileData) -> Result<(), MsgLogicControlError> {
+    let torrent_path = torrent_file_data.get_torrent_representative_name();
+    let _result = fs::remove_dir_all(format!("temp/{}", torrent_path))
+        .map_err(|err| MsgLogicControlError::RestartingDownload(format!("{:?}", err)));
+
     Ok(())
 }
 
@@ -49,40 +61,50 @@ fn remove_all(client: &mut Client) -> Result<(), MsgLogicControlError> {
 /// Funcion encargada de manejar toda conexion y comunicación con todos los
 /// peers que se hayan obtenido a partir de una respuesta de tracker e info
 /// adicional del archivo .torrent correspondiente.
+/// (***Comportandose como LocalPeer de rol: Client***)
 ///
 /// POR AHORA finaliza la comunicación cuando puede completar una pieza completa,
 /// o en caso de error interno.
 ///
-pub fn handle_general_interaction(client: &mut Client) -> Result<(), MsgLogicControlError> {
+pub fn handle_general_interaction_as_client(
+    torrent_file_data: &TorrentFileData,
+    tracker_response_data: &TrackerResponseData,
+    torrent_status: &mut TorrentStatus,
+) -> Result<(), MsgLogicControlError> {
     // POR AHORA; LOGICA PARA COMPLETAR UNA PIEZA:
-    let mut current_server_peer_index = 0;
+    let mut current_peer_index = 0;
+
+    set_up_directory(torrent_file_data)?;
 
     loop {
-        if let Some(tracker_response) = &client.tracker_response {
-            let max_server_peer_index = tracker_response.peers.len();
-            if current_server_peer_index >= max_server_peer_index {
-                return Err(MsgLogicControlError::ConectingWithPeer(
-                    "No se pudo conectar con ningun peer para completar la pieza".to_string(),
-                ));
-            }
+        let max_server_peer_index = tracker_response_data.peers.len();
+        if current_peer_index >= max_server_peer_index {
+            return Err(MsgLogicControlError::ConectingWithPeer(
+                "No se pudo conectar con ningun peer para completar la pieza".to_string(),
+            ));
         };
 
-        match interact_with_single_peer(client, current_server_peer_index) {
+        let mut local_peer = LocalPeer::start_communication(
+            torrent_file_data,
+            tracker_response_data,
+            current_peer_index,
+        )?;
+        match local_peer.interact_with_peer(torrent_file_data, torrent_status) {
             Ok(HandlerInteractionStatus::LookForAnotherPeer) => {
-                current_server_peer_index += 1;
-                flush_data(client)?;
+                current_peer_index += 1;
+                flush_data(torrent_file_data, torrent_status)?;
                 continue;
             }
             Ok(HandlerInteractionStatus::FinishInteraction) => {
                 return Ok(());
             }
             Err(MsgLogicControlError::ConectingWithPeer(_)) => {
-                current_server_peer_index += 1;
-                flush_data(client)?;
+                current_peer_index += 1;
+                flush_data(torrent_file_data, torrent_status)?;
                 continue;
             }
             Err(another_err) => {
-                remove_all(client)?;
+                remove_all(torrent_file_data)?;
                 return Err(another_err);
             }
         };

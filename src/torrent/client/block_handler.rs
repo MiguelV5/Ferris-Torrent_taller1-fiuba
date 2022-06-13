@@ -3,7 +3,8 @@
 //! recibidos de mensajes de tipo "Piece" en medio de interacciones individuales
 //! con peers.
 
-use super::client_struct::Client;
+use crate::torrent::data::torrent_file_data::TorrentFileData;
+
 use core::fmt;
 use log::info;
 use sha1::{Digest, Sha1};
@@ -33,7 +34,7 @@ impl Error for BlockHandlerError {}
 /// un peer, escribe en disco (en un path correspondiente a su PIEZA respectiva)
 /// dicho bloque
 ///
-pub fn store_block(block: &[u8], piece_index: u32, path: &str) -> Result<(), BlockHandlerError> {
+pub fn store_block(block: &[u8], piece_index: usize, path: &str) -> Result<(), BlockHandlerError> {
     let file_name = format!("temp/{}/piece_{}", path, piece_index);
     let mut file = OpenOptions::new()
         .create(true)
@@ -45,7 +46,7 @@ pub fn store_block(block: &[u8], piece_index: u32, path: &str) -> Result<(), Blo
     Ok(())
 }
 
-fn read_a_piece(piece_index: u32, path: &str) -> Result<Vec<u8>, BlockHandlerError> {
+fn read_a_piece(piece_index: usize, path: &str) -> Result<Vec<u8>, BlockHandlerError> {
     let file_name = format!("temp/{}/piece_{}", path, piece_index);
     let mut file = OpenOptions::new()
         .create(false)
@@ -75,18 +76,14 @@ fn to_hex(bytes: &[u8]) -> String {
 /// contenido en el archivo .torrent dado.
 ///
 pub fn check_sha1_piece(
-    client_peer: &Client,
-    piece_index: u32,
+    torrent_file_data: &TorrentFileData,
+    piece_index: usize,
     path: &str,
 ) -> Result<(), BlockHandlerError> {
     let piece = read_a_piece(piece_index, path)?;
     let piece_sha1 = get_sha1(&piece);
 
-    let expected_piece_sha1 = client_peer.torrent_file.get_piece_sha1(
-        piece_index
-            .try_into()
-            .map_err(|err| BlockHandlerError::CheckingSha1Piece(format!("{:?}", err)))?,
-    );
+    let expected_piece_sha1 = torrent_file_data.get_piece_sha1(piece_index);
 
     info!(
         "\n    Hash SHA1 esperado: {:?}",

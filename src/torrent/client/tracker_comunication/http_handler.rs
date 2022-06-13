@@ -121,7 +121,7 @@ impl MsgDescriptor {
         let port = INIT_PORT;
         let uploaded = 0;
         let downloaded = 0;
-        let left = torrent.get_total_size() as u64;
+        let left = torrent.get_total_length() as u64;
         let event = String::from(STARTED);
         let host = init_host(torrent.get_tracker_main())?;
 
@@ -403,7 +403,7 @@ mod test {
         msg_get_expected.push_str(&info_hash);
         msg_get_expected.push_str("&peer_id=ABCDEFGHIJKLMNOPQRST&ip=127.0.0.1&port=6881");
         msg_get_expected.push_str("&uploaded=0&downloaded=0&left=");
-        msg_get_expected.push_str(&torrent.get_total_size().to_string());
+        msg_get_expected.push_str(&torrent.get_total_length().to_string());
         msg_get_expected.push_str("&event=started HTTP/1.0\r\nHost:torrent.ubuntu.com\r\n\r\n");
 
         assert_eq!(http_handler.get_send_msg(), Ok(msg_get_expected))
@@ -438,7 +438,7 @@ mod test {
         msg_get_expected.push_str("&port=");
         msg_get_expected.push_str(http_handler.msg_get.get_port().as_str());
         msg_get_expected.push_str("&uploaded=0&downloaded=0&left=");
-        msg_get_expected.push_str(&torrent.get_total_size().to_string());
+        msg_get_expected.push_str(&torrent.get_total_length().to_string());
         msg_get_expected.push_str("&event=started HTTP/1.0\r\nHost:");
         msg_get_expected.push_str(http_handler.msg_get.get_host().as_str());
         msg_get_expected.push_str("\r\n\r\n");
@@ -475,7 +475,7 @@ mod test {
         msg_get_expected.push_str("&port=");
         msg_get_expected.push_str(http_handler.msg_get.get_port().as_str());
         msg_get_expected.push_str("&uploaded=0&downloaded=0&left=");
-        msg_get_expected.push_str(&torrent.get_total_size().to_string());
+        msg_get_expected.push_str(&torrent.get_total_length().to_string());
         msg_get_expected.push_str("&event=started HTTP/1.0\r\nHost:");
         msg_get_expected.push_str(http_handler.msg_get.get_host().as_str());
         msg_get_expected.push_str("\r\n\r\n");

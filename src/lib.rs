@@ -17,9 +17,13 @@
 
 pub mod torrent;
 
-use crate::torrent::client::{client_struct::Client, peers_comunication};
+use crate::torrent::{
+    client::peers_comunication,
+    data::torrent_status::TorrentStatus,
+    local_peer::{communicate_with_tracker, create_torrent},
+};
 
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use std::{env, error::Error};
 
 /// Funcion principal de ejecución del programa.
@@ -41,15 +45,29 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     info!("Archivo ingresado con exito");
 
     info!("Creacion de la estructura Client");
-    let mut client_struct = Client::new(&file_path)?;
+    //let mut client_struct = LocalPeer::new()?;
+
+    //===========================
+
+    let torrent_file = create_torrent(&file_path)?;
+    trace!("TorrentFileData creado y almacenado dentro del Client");
+    let torrent_size = torrent_file.get_total_length() as u64;
+    let mut torrent_status = TorrentStatus::new(torrent_size, torrent_file.total_amount_of_pieces);
+
+    //===========================
+
     info!("El Client fue creado exitosamente");
 
     info!("Inicio de comunicacion con tracker mediante Client");
-    client_struct.init_communication()?;
+    let tracker_response = communicate_with_tracker(torrent_file.clone())?;
     info!("Comunicacion con el tracker exitosa");
 
     info!("Inicio de comunicacion con peers.");
-    peers_comunication::handler::handle_general_interaction(&mut client_struct)?;
+    peers_comunication::handler::handle_general_interaction_as_client(
+        &torrent_file,
+        &tracker_response,
+        &mut torrent_status,
+    )?;
     info!("Se descargó exitosamente una pieza.");
 
     Ok(())

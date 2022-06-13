@@ -2,8 +2,10 @@
 //! Este modulo contiene las funciones encargadas de enviar mensajes P2P en sockets, los cuales deben enviarse en bytes correspondientes al protocolo BitTorrent para comunicación entre peers
 //!
 
+use log::info;
+
 use crate::torrent::{
-    client::client_struct::*,
+    data::{torrent_file_data::TorrentFileData, torrent_status::TorrentStatus},
     parsers::{p2p, p2p::constants::PSTR_STRING_HANDSHAKE, p2p::message::P2PMessage},
 };
 use core::fmt;
@@ -18,6 +20,7 @@ pub enum MsgSenderError {
     ZeroBlockLength(String),
     BlockLengthLimitExceeded(String),
     NumberConversion(String),
+    SendingRequest(String),
 }
 
 impl fmt::Display for MsgSenderError {
@@ -32,11 +35,15 @@ const MAX_BLOCK_BYTES: u32 = 131072; //2^17 bytes
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Handshake
 ///
-pub fn send_handshake(client_peer: &Client, stream: &mut TcpStream) -> Result<(), MsgSenderError> {
+pub fn send_handshake(
+    stream: &mut TcpStream,
+    peer_id: &[u8],
+    torrent_file_data: &TorrentFileData,
+) -> Result<(), MsgSenderError> {
     let handshake_bytes = p2p::encoder::to_bytes(P2PMessage::Handshake {
         protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-        info_hash: client_peer.torrent_file.info_hash.clone(),
-        peer_id: client_peer.peer_id.clone(),
+        info_hash: torrent_file_data.get_info_hash(),
+        peer_id: peer_id.to_vec(),
     })
     .map_err(|error| MsgSenderError::EncondingMessageIntoBytes(format!("{:?}", error)))?;
 
@@ -97,9 +104,12 @@ pub fn send_have(stream: &mut TcpStream, completed_piece_index: u32) -> Result<(
 
 /// Funcion encargada de codificar y enviar un mensaje P2P de tipo Bitfield
 ///
-pub fn send_bitfield(client_peer: &Client, stream: &mut TcpStream) -> Result<(), MsgSenderError> {
+pub fn send_bitfield(
+    stream: &mut TcpStream,
+    torrent_status: &TorrentStatus,
+) -> Result<(), MsgSenderError> {
     let bitfield_msg = P2PMessage::Bitfield {
-        bitfield: client_peer.data_of_download.pieces_availability.clone(),
+        bitfield: torrent_status.get_pieces_availability(),
     };
     send_msg(stream, bitfield_msg)
 }
@@ -123,17 +133,33 @@ fn check_request_or_cancel_fields(amount_of_bytes: u32) -> Result<(), MsgSenderE
 ///
 pub fn send_request(
     stream: &mut TcpStream,
-    piece_index: u32,
-    beginning_byte_index: u32,
-    amount_of_bytes: u32,
+    torrent_file_data: &TorrentFileData,
+    torrent_status: &TorrentStatus,
+    piece_index: usize,
 ) -> Result<(), MsgSenderError> {
+    let beginning_byte_index = torrent_status
+        .calculate_beginning_byte_index(piece_index)
+        .map_err(|err| MsgSenderError::SendingRequest(format!("{:?}", err)))?;
+    let amount_of_bytes = torrent_status
+        .calculate_amount_of_bytes_of_block(torrent_file_data, piece_index, beginning_byte_index)
+        .map_err(|err| MsgSenderError::SendingRequest(format!("{:?}", err)))?;
+    let piece_index = piece_index
+        .try_into()
+        .map_err(|error| MsgSenderError::SendingRequest(format!("{:?}", error)))?;
+
+    //habria que ver si ese checkeo sigue siendo necesario
     check_request_or_cancel_fields(amount_of_bytes)?;
     let request_msg = P2PMessage::Request {
         piece_index,
         beginning_byte_index,
         amount_of_bytes,
     };
-    send_msg(stream, request_msg)
+    send_msg(stream, request_msg)?;
+    info!(
+        "Mensaje enviado: Request[piece_index: {}, beginning_byte_index: {}. amount_of_bytes: {}]",
+        piece_index, beginning_byte_index, amount_of_bytes
+    );
+    Ok(())
 }
 
 fn check_piece_fields(block: &[u8]) -> Result<(), MsgSenderError> {
@@ -176,10 +202,21 @@ pub fn send_piece(
 ///
 pub fn send_cancel(
     stream: &mut TcpStream,
-    piece_index: u32,
-    beginning_byte_index: u32,
-    amount_of_bytes: u32,
+    torrent_file_data: &TorrentFileData,
+    torrent_status: &TorrentStatus,
+    piece_index: usize,
 ) -> Result<(), MsgSenderError> {
+    let beginning_byte_index = torrent_status
+        .calculate_beginning_byte_index(piece_index)
+        .map_err(|err| MsgSenderError::SendingRequest(format!("{:?}", err)))?;
+    let amount_of_bytes = torrent_status
+        .calculate_amount_of_bytes_of_block(torrent_file_data, piece_index, beginning_byte_index)
+        .map_err(|err| MsgSenderError::SendingRequest(format!("{:?}", err)))?;
+    let piece_index = piece_index
+        .try_into()
+        .map_err(|error| MsgSenderError::SendingRequest(format!("{:?}", error)))?;
+
+    //habria que ver si ese checkeo sigue siendo necesario
     check_request_or_cancel_fields(amount_of_bytes)?;
     let cancel_msg = P2PMessage::Cancel {
         piece_index,
@@ -195,11 +232,12 @@ mod test_msg_sender {
     use crate::torrent::{
         client::peers_comunication::msg_receiver,
         data::{
-            data_of_download::{DataOfDownload, StateOfDownload},
             peer_data_for_communication::PeerDataForP2PCommunication,
-            torrent_file_data::TorrentFileData,
+            torrent_file_data::{TargetFilesData, TorrentFileData},
+            torrent_status::{StateOfDownload, TorrentStatus},
             tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
         },
+        local_peer::*,
         parsers::p2p::{
             self,
             constants::{PSTR_STRING_HANDSHAKE, TOTAL_NUM_OF_BYTES_HANDSHAKE},
@@ -273,8 +311,18 @@ mod test_msg_sender {
 
     //
     //
-    fn create_default_client_peer_with_a_server_peer_that_has_one_piece(
-    ) -> Result<Client, Box<dyn Error>> {
+    fn create_default_client_peer_with_a_server_peer_that_has_one_piece() -> Result<
+        (
+            TrackerResponseData,
+            TorrentStatus,
+            TorrentFileData,
+            LocalPeer,
+        ),
+        Box<dyn Error>,
+    > {
+        let (_listener, address) = try_bind_listener(STARTING_PORT)?;
+        let stream = TcpStream::connect(address)?;
+
         let server_peer = PeerDataFromTrackerResponse {
             peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
             peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
@@ -286,7 +334,7 @@ mod test_msg_sender {
             incomplete: 0,
             peers: vec![server_peer],
         };
-        let data_of_download = DataOfDownload {
+        let torrent_status = TorrentStatus {
             uploaded: 0,
             downloaded: 0,
             left: 16,
@@ -294,33 +342,33 @@ mod test_msg_sender {
             pieces_availability: vec![PieceStatus::MissingPiece],
         };
         let torrent_file = TorrentFileData {
-            is_single_file: true,
-            name: "nombre.txt".to_string(),
+            target_files_data: TargetFilesData::SingleFile {
+                file_name: "nombre.txt".to_string(),
+                file_length: 16,
+            },
             url_tracker_main: "tracker_main.com".to_string(),
             url_tracker_list: vec![],
-            info_hash: DEFAULT_INFO_HASH.to_vec(),
-            pieces: vec![],
+            sha1_info_hash: DEFAULT_INFO_HASH.to_vec(),
+            sha1_pieces: vec![],
             piece_length: 16,
-            path: vec![],
-            total_amount_pieces: 1,
-            total_size: 16,
+            total_amount_of_pieces: 1,
+            total_length: 16,
         };
         let server_peer_data = PeerDataForP2PCommunication {
             peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
-            pieces_availability: Some(vec![PieceStatus::ValidAndAvailablePiece]),
+            pieces_availability: vec![PieceStatus::ValidAndAvailablePiece],
             am_interested: false,
             am_choking: true,
             peer_choking: true,
+            peer_interested: false,
         };
-        let list_of_peers_data_for_communication = Some(vec![server_peer_data]);
-        Ok(Client {
+        let local_peer = LocalPeer {
             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
-            info_hash: DEFAULT_INFO_HASH.to_vec(),
-            data_of_download,
-            torrent_file,
-            tracker_response: Some(tracker_response),
-            list_of_peers_data_for_communication,
-        })
+            stream,
+            external_peer_data: server_peer_data,
+            role: PeerRole::Client,
+        };
+        Ok((tracker_response, torrent_status, torrent_file, local_peer))
     }
 
     //==========================================
@@ -331,9 +379,12 @@ mod test_msg_sender {
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
-        let client_peer = create_default_client_peer_with_a_server_peer_that_has_one_piece()?;
+        let (_tracker_response, _torrent_status, torrent_file_data, local_peer) =
+            create_default_client_peer_with_a_server_peer_that_has_one_piece()?;
 
-        assert!(send_handshake(&client_peer, &mut sender_stream).is_ok());
+        assert!(
+            send_handshake(&mut sender_stream, &local_peer.peer_id, &torrent_file_data).is_ok()
+        );
 
         let mut buffer = [0; TOTAL_NUM_OF_BYTES_HANDSHAKE];
         receptor_stream.read(&mut buffer)?;
@@ -341,8 +392,8 @@ mod test_msg_sender {
 
         let expected_msg = P2PMessage::Handshake {
             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-            info_hash: client_peer.torrent_file.info_hash.clone(),
-            peer_id: client_peer.peer_id.clone(),
+            info_hash: torrent_file_data.sha1_info_hash.clone(),
+            peer_id: local_peer.peer_id.clone(),
         };
 
         assert_eq!(expected_msg, received_msg);
@@ -467,9 +518,10 @@ mod test_msg_sender {
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
-        let client_peer = create_default_client_peer_with_a_server_peer_that_has_one_piece()?;
+        let (_tracker_response, torrent_status, _torrent_file_data, _local_peer) =
+            create_default_client_peer_with_a_server_peer_that_has_one_piece()?;
 
-        assert!(send_bitfield(&client_peer, &mut sender_stream).is_ok());
+        assert!(send_bitfield(&mut sender_stream, &torrent_status).is_ok());
 
         let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Bitfield {
@@ -496,10 +548,11 @@ mod test_msg_sender {
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
-        let mut client_peer = create_default_client_peer_with_a_server_peer_that_has_one_piece()?;
-        client_peer.data_of_download.pieces_availability[0] = PieceStatus::ValidAndAvailablePiece;
+        let (_tracker_response, mut torrent_status, _torrent_file_data, _local_peer) =
+            create_default_client_peer_with_a_server_peer_that_has_one_piece()?;
+        torrent_status.pieces_availability[0] = PieceStatus::ValidAndAvailablePiece;
 
-        assert!(send_bitfield(&client_peer, &mut sender_stream).is_ok());
+        assert!(send_bitfield(&mut sender_stream, &torrent_status).is_ok());
 
         let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Bitfield {
@@ -525,8 +578,30 @@ mod test_msg_sender {
         let (listener, address) = try_bind_listener(STARTING_PORT)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
+        let torrent_file_data = TorrentFileData {
+            url_tracker_main: "tracker_main.com".to_string(),
+            url_tracker_list: vec![],
+            sha1_pieces: vec![],
+            sha1_info_hash: DEFAULT_INFO_HASH.to_vec(),
+            piece_length: 8,
+            total_length: 8,
+            total_amount_of_pieces: 1,
+            target_files_data: TargetFilesData::SingleFile {
+                file_name: "name.txt".to_string(),
+                file_length: 8,
+            },
+        };
+        let torrent_status = TorrentStatus {
+            uploaded: 0,
+            downloaded: 4,
+            left: 4,
+            event: StateOfDownload::Started,
+            pieces_availability: vec![PieceStatus::PartiallyDownloaded {
+                downloaded_bytes: 4,
+            }],
+        };
 
-        assert!(send_request(&mut sender_stream, 0, 4, 4).is_ok());
+        assert!(send_request(&mut sender_stream, &torrent_file_data, &torrent_status, 0).is_ok());
 
         let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Request {
@@ -536,37 +611,6 @@ mod test_msg_sender {
         };
 
         assert_eq!(expected_msg, received_msg);
-
-        Ok(())
-    }
-
-    #[test]
-    fn client_peer_send_request_of_zero_bytes_error() -> Result<(), Box<dyn Error>> {
-        let (_listener, address) = try_bind_listener(STARTING_PORT)?;
-        let mut sender_stream = TcpStream::connect(address)?;
-
-        assert_eq!(
-            Err(MsgSenderError::ZeroAmountOfBytes(
-                "[MsgSenderError] The amount of bytes cannot be equal zero.".to_string(),
-            )),
-            send_request(&mut sender_stream, 0, 4, 0)
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn client_peer_send_request_bigger_than_the_max_block_bytes_error() -> Result<(), Box<dyn Error>>
-    {
-        let (_listener, address) = try_bind_listener(STARTING_PORT)?;
-        let mut sender_stream = TcpStream::connect(address)?;
-
-        assert_eq!(
-            Err(MsgSenderError::AmountOfBytesLimitExceeded(
-                "[MsgSenderError] The amount of bytes must be smaller than 2^17.".to_string(),
-            )),
-            send_request(&mut sender_stream, 0, 4, MAX_BLOCK_BYTES + 1)
-        );
 
         Ok(())
     }
@@ -628,8 +672,30 @@ mod test_msg_sender {
         let (listener, address) = try_bind_listener(STARTING_PORT)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
+        let torrent_file_data = TorrentFileData {
+            url_tracker_main: "tracker_main.com".to_string(),
+            url_tracker_list: vec![],
+            sha1_pieces: vec![],
+            sha1_info_hash: DEFAULT_INFO_HASH.to_vec(),
+            piece_length: 8,
+            total_length: 8,
+            total_amount_of_pieces: 1,
+            target_files_data: TargetFilesData::SingleFile {
+                file_name: "name.txt".to_string(),
+                file_length: 8,
+            },
+        };
+        let torrent_status = TorrentStatus {
+            uploaded: 0,
+            downloaded: 4,
+            left: 4,
+            event: StateOfDownload::Started,
+            pieces_availability: vec![PieceStatus::PartiallyDownloaded {
+                downloaded_bytes: 4,
+            }],
+        };
 
-        assert!(send_cancel(&mut sender_stream, 0, 4, 4).is_ok());
+        assert!(send_cancel(&mut sender_stream, &torrent_file_data, &torrent_status, 0).is_ok());
 
         let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Cancel {
@@ -639,37 +705,6 @@ mod test_msg_sender {
         };
 
         assert_eq!(expected_msg, received_msg);
-
-        Ok(())
-    }
-
-    #[test]
-    fn client_peer_send_cancel_of_zero_bytes_error() -> Result<(), Box<dyn Error>> {
-        let (_listener, address) = try_bind_listener(STARTING_PORT)?;
-        let mut sender_stream = TcpStream::connect(address)?;
-
-        assert_eq!(
-            Err(MsgSenderError::ZeroAmountOfBytes(
-                "[MsgSenderError] The amount of bytes cannot be equal zero.".to_string(),
-            )),
-            send_cancel(&mut sender_stream, 0, 4, 0)
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn client_peer_send_cancel_bigger_than_the_max_block_bytes_error() -> Result<(), Box<dyn Error>>
-    {
-        let (_listener, address) = try_bind_listener(STARTING_PORT)?;
-        let mut sender_stream = TcpStream::connect(address)?;
-
-        assert_eq!(
-            Err(MsgSenderError::AmountOfBytesLimitExceeded(
-                "[MsgSenderError] The amount of bytes must be smaller than 2^17.".to_string(),
-            )),
-            send_cancel(&mut sender_stream, 0, 4, MAX_BLOCK_BYTES + 1)
-        );
 
         Ok(())
     }

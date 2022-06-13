@@ -7,6 +7,7 @@ use crate::torrent::parsers::bencoding::values::ValuesBencoding;
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    str::FromStr,
 };
 
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
@@ -46,43 +47,49 @@ pub struct PeerDataFromTrackerResponse {
     pub peer_address: SocketAddr,
 }
 
-fn ip_str_to_u8(string: &str) -> ResultResponse<u8> {
-    match string.parse::<u8>() {
-        Ok(number) => Ok(number),
-        Err(_) => Err(ResponseError::ConvertIp(Section::Ip)),
-    }
+fn to_sock_addr(ip: String, port: u16) -> ResultResponse<SocketAddr> {
+    let ip_addr = match IpAddr::from_str(&ip) {
+        Ok(ip_result) => ip_result,
+        Err(_) => return Err(ResponseError::ConvertIp(Section::Ip)),
+    };
+    let result_addr = SocketAddr::new(ip_addr, port);
+    log::debug!("Addr: {:?}", result_addr);
+    Ok(result_addr)
 }
 
-fn from_str_to_ipaddr(ip: String) -> ResultResponse<IpAddr> {
-    let iter_numbers = ip.split('.');
-    let mut vec_numbers = vec![];
-
-    for number in iter_numbers {
-        vec_numbers.push(ip_str_to_u8(number)?)
-    }
-
-    if vec_numbers.len() != 4 {
+pub fn decode_compact_peer(compact_peer: Vec<u8>) -> ResultResponse<(IpAddr, u16)> {
+    let multiplier = 256;
+    if compact_peer.len() != 6 {
         return Err(ResponseError::ConvertIp(Section::Ip));
     }
-
     let ipv4_addr = Ipv4Addr::new(
-        vec_numbers[0],
-        vec_numbers[1],
-        vec_numbers[2],
-        vec_numbers[3],
+        compact_peer[0],
+        compact_peer[1],
+        compact_peer[2],
+        compact_peer[3],
     );
-    Ok(IpAddr::V4(ipv4_addr))
+    let port = (compact_peer[4] as u16 * multiplier) + compact_peer[5] as u16;
+    Ok((IpAddr::V4(ipv4_addr), port))
 }
 
 impl PeerDataFromTrackerResponse {
     pub fn new(id: Vec<u8>, ip: String, port: u16) -> ResultResponse<Self> {
         let mut peer_id = None;
-        let ip_addr = from_str_to_ipaddr(ip)?;
-        let peer_address = SocketAddr::new(ip_addr, port);
+        let peer_address = to_sock_addr(ip, port)?;
         if !id.is_empty() {
             peer_id = Some(id);
         }
 
+        Ok(PeerDataFromTrackerResponse {
+            peer_id,
+            peer_address,
+        })
+    }
+
+    pub fn new_from_compact(compact_peer: Vec<u8>) -> ResultResponse<Self> {
+        let peer_id = None;
+        let (ip_addr, port) = decode_compact_peer(compact_peer)?;
+        let peer_address = SocketAddr::new(ip_addr, port);
         Ok(PeerDataFromTrackerResponse {
             peer_id,
             peer_address,
@@ -139,6 +146,20 @@ fn init_peers(dic_response: &DicValues) -> ResultResponse<Vec<PeerDataFromTracke
             }
             Ok(vector_peers)
         }
+        Some(ValuesBencoding::String(peers_compact)) => {
+            let long_compact = 6;
+            let list_peers_compact: Vec<Vec<u8>> = peers_compact
+                .chunks(long_compact)
+                .map(|s| s.into())
+                .collect();
+            for peer_compact in list_peers_compact {
+                if let Ok(peer_struct) = PeerDataFromTrackerResponse::new_from_compact(peer_compact)
+                {
+                    vector_peers.push(peer_struct)
+                };
+            }
+            Ok(vector_peers)
+        }
         Some(_) => Err(ResponseError::Format(Section::Peers)),
         None => Err(ResponseError::NotFound(Section::Peers)),
     }
@@ -157,6 +178,24 @@ impl TrackerResponseData {
             incomplete,
             peers,
         })
+    }
+
+    pub fn get_peer_address(&self, peer_index: usize) -> Option<SocketAddr> {
+        self.peers
+            .get(peer_index)
+            .map(|peer_data| peer_data.peer_address)
+    }
+
+    pub fn has_expected_peer_id(&self, peer_index: usize, peer_id: &[u8]) -> bool {
+        if let Some(peer_data) = self.peers.get(peer_index) {
+            if let Some(expected_peer_id) = &peer_data.peer_id {
+                expected_peer_id == peer_id
+            } else {
+                true
+            }
+        } else {
+            false
+        }
     }
 }
 
@@ -263,45 +302,45 @@ mod test {
 
         assert_eq!(port, Err(ResponseError::NotFound(Section::Interval)))
     }
-    #[test]
-    fn test_from_str_to_ipaddr_ok() {
-        let ip = String::from("197.0.12.1");
-        let ipaddr_expected = IpAddr::V4(Ipv4Addr::new(197, 0, 12, 1));
-
-        assert_eq!(Ok(ipaddr_expected), from_str_to_ipaddr(ip))
-    }
-    #[test]
-    fn test_from_str_to_ipaddr_error_lenght() {
-        let ip = String::from("8081");
-        assert_eq!(
-            Err(ResponseError::ConvertIp(Section::Ip)),
-            from_str_to_ipaddr(ip)
-        );
-
-        let ip = String::from("197.0.0.1.9");
-        assert_eq!(
-            Err(ResponseError::ConvertIp(Section::Ip)),
-            from_str_to_ipaddr(ip)
-        );
-
-        let ip = String::from("177.1.12");
-        assert_eq!(
-            Err(ResponseError::ConvertIp(Section::Ip)),
-            from_str_to_ipaddr(ip)
-        );
-    }
-    #[test]
-    fn test_from_str_to_ipaddr_error_numbers() {
-        let ip = String::from("12.0.0.1.a");
-        assert_eq!(
-            Err(ResponseError::ConvertIp(Section::Ip)),
-            from_str_to_ipaddr(ip)
-        );
-
-        let ip = String::from("A.B.C.D.E");
-        assert_eq!(
-            Err(ResponseError::ConvertIp(Section::Ip)),
-            from_str_to_ipaddr(ip)
-        );
-    }
+    //    #[test]
+    //    fn test_from_str_to_ipaddr_ok() {
+    //        let ip = String::from("197.0.12.1");
+    //        let ipaddr_expected = IpAddr::V4(Ipv4Addr::new(197, 0, 12, 1));
+    //
+    //        assert_eq!(Ok(ipaddr_expected), from_str_to_ipaddr(ip))
+    //    }
+    //    #[test]
+    //    fn test_from_str_to_ipaddr_error_lenght() {
+    //        let ip = String::from("8081");
+    //        assert_eq!(
+    //            Err(ResponseError::ConvertIp(Section::Ip)),
+    //            from_str_to_ipaddr(ip)
+    //        );
+    //
+    //        let ip = String::from("197.0.0.1.9");
+    //        assert_eq!(
+    //            Err(ResponseError::ConvertIp(Section::Ip)),
+    //            from_str_to_ipaddr(ip)
+    //        );
+    //
+    //        let ip = String::from("177.1.12");
+    //        assert_eq!(
+    //            Err(ResponseError::ConvertIp(Section::Ip)),
+    //            from_str_to_ipaddr(ip)
+    //        );
+    //    }
+    //    #[test]
+    //    fn test_from_str_to_ipaddr_error_numbers() {
+    //        let ip = String::from("12.0.0.1.a");
+    //        assert_eq!(
+    //            Err(ResponseError::ConvertIp(Section::Ip)),
+    //            from_str_to_ipaddr(ip)
+    //        );
+    //
+    //        let ip = String::from("A.B.C.D.E");
+    //        assert_eq!(
+    //            Err(ResponseError::ConvertIp(Section::Ip)),
+    //            from_str_to_ipaddr(ip)
+    //        );
+    //    }
 }
