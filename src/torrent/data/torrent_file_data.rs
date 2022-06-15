@@ -9,6 +9,8 @@ use std::{collections::HashMap, error::Error, fmt};
 
 use crate::torrent::parsers::p2p::message::PieceStatus;
 use crate::torrent::parsers::{bencoding::values::ValuesBencoding, *};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 
 const ANNOUNCE: &str = "announce";
@@ -25,6 +27,7 @@ const PATH: &str = "path";
 ///Enumerado que representa la seccion en la que el error puede surgir
 pub enum Section {
     Announce,
+    TrackerList,
     Info,
     PieceLength,
     Files,
@@ -67,7 +70,7 @@ pub enum TargetFilesData {
 #[derive(PartialEq, Debug, Clone)]
 pub struct TorrentFileData {
     pub url_tracker_main: String,
-    pub url_tracker_list: Vec<ValuesBencoding>,
+    pub url_tracker_list: Vec<String>,
     pub sha1_pieces: Vec<u8>,
     pub sha1_info_hash: Vec<u8>,
     pub piece_length: u64,
@@ -107,6 +110,35 @@ fn init_tracker_main(dic_torrent: &DicValues) -> Result<String, TorrentFileDataE
     }
 }
 
+fn init_tracker_list(dic_torrent: &DicValues) -> Result<Vec<String>, TorrentFileDataError> {
+    let mut list_tracker_url = vec![];
+    match dic_torrent.get(&ANNOUNCE_LIST.as_bytes().to_vec()) {
+        Some(ValuesBencoding::List(list_of_lists)) => {
+            for list in list_of_lists {
+                match list {
+                    ValuesBencoding::List(list_values) => {
+                        let mut list_shuffle = list_values.clone();
+                        list_shuffle.shuffle(&mut thread_rng());
+                        for value in list_shuffle {
+                            match value {
+                                ValuesBencoding::String(url) => {
+                                    list_tracker_url.push(vec_u8_to_string(&url))
+                                }
+                                _ => {
+                                    return Err(TorrentFileDataError::Format(Section::TrackerList))
+                                }
+                            }
+                        }
+                    }
+                    _ => return Err(TorrentFileDataError::Format(Section::TrackerList)),
+                }
+            }
+            Ok(list_tracker_url)
+        }
+        _ => Ok(vec![]),
+    }
+}
+
 fn init_info(dic_torrent: &DicValues) -> Result<DicValues, TorrentFileDataError> {
     match dic_torrent.get(&INFO.as_bytes().to_vec()) {
         Some(ValuesBencoding::Dic(dic_info)) => Ok(dic_info.clone()),
@@ -135,15 +167,6 @@ fn init_piece_length(dic_info: &DicValues) -> Result<u64, TorrentFileDataError> 
         }
         Some(_) => Err(TorrentFileDataError::Format(Section::PieceLength)),
         None => Err(TorrentFileDataError::NotFound(Section::PieceLength)),
-    }
-}
-
-fn init_tracker_list(
-    dic_torrent: &DicValues,
-) -> Result<Vec<ValuesBencoding>, TorrentFileDataError> {
-    match dic_torrent.get(&ANNOUNCE_LIST.as_bytes().to_vec()) {
-        Some(ValuesBencoding::List(list)) => Ok(list.clone()),
-        _ => Ok(vec![]),
     }
 }
 
@@ -457,17 +480,17 @@ mod test {
     use crate::torrent::client::medatada_analyzer::read_torrent_file_to_dic;
 
     #[test]
-    fn test_torrent_single_file_ok() {
+    fn test_torrent_single_file_ok() -> Result<(), Box<dyn Error>> {
         //ubuntu-14.04.6-server-ppc64el.iso [un solo archivo y un solo tracker]
         let dir = "torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("{:?}", error),
+            Err(error) => return Err(Box::new(error)),
         };
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("{:?}", error),
+            Err(error) => return Err(Box::new(error)),
         };
         let tracker_main = String::from("http://torrent.ubuntu.com:6969/announce");
 
@@ -491,19 +514,21 @@ mod test {
 
         assert_eq!(first_piece, torrent.sha1_pieces[..long_sha1]);
         assert_eq!(last_piece, torrent.sha1_pieces[pos_last_piece..]);
+        Ok(())
     }
+
     #[test]
-    fn test_torrent_multiple_file_ok() {
+    fn test_torrent_multiple_file_ok() -> Result<(), Box<dyn Error>> {
         let dir = "torrents_for_test/big-buck-bunny.torrent";
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("{:?}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("{:?}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
         let tracker_main = String::from("udp://tracker.leechers-paradise.org:6969");
@@ -527,5 +552,6 @@ mod test {
 
         assert_eq!(first_piece, torrent.sha1_pieces[..long_sha1]);
         assert_eq!(last_piece, torrent.sha1_pieces[pos_last_piece..]);
+        Ok(())
     }
 }

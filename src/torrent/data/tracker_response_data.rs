@@ -53,7 +53,6 @@ fn to_sock_addr(ip: String, port: u16) -> ResultResponse<SocketAddr> {
         Err(_) => return Err(ResponseError::ConvertIp(Section::Ip)),
     };
     let result_addr = SocketAddr::new(ip_addr, port);
-    log::debug!("Addr: {:?}", result_addr);
     Ok(result_addr)
 }
 

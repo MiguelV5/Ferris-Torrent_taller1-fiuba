@@ -86,7 +86,7 @@ mod tests {
     use super::*;
     use crate::torrent::parsers::bencoding;
     #[test]
-    fn read_torrent1_ok() {
+    fn read_torrent1_ok() -> Result<(), Box<dyn Error>> {
         let file_dir = "torrents_for_test/ubuntu-22.04-desktop-amd64.iso.torrent";
         match read_torrent_file(file_dir) {
             Ok(torrent_metadata) => {
@@ -94,15 +94,16 @@ mod tests {
                     Ok(dic_torrent) => {
                         let to_bencoding = bencoding::encoder::from_dic(dic_torrent);
                         assert_eq!(torrent_metadata, to_bencoding);
+                        Ok(())
                     }
-                    Err(error) => panic!("ErrorBencoding: {:?}", error),
+                    Err(error) => return Err(Box::new(error)),
                 }
             }
-            Err(error) => panic!("MetadataError: {:?}", error),
+            Err(error) => return Err(Box::new(error)),
         }
     }
     #[test]
-    fn read_torrent2_ok() {
+    fn read_torrent2_ok() -> Result<(), Box<dyn Error>> {
         let file_dir = "torrents_for_test/big-buck-bunny.torrent";
         match read_torrent_file(file_dir) {
             Ok(torrent_metadata) => {
@@ -110,15 +111,16 @@ mod tests {
                     Ok(dic_torrent) => {
                         let to_bencoding = bencoding::encoder::from_dic(dic_torrent);
                         assert_eq!(torrent_metadata, to_bencoding);
+                        Ok(())
                     }
-                    Err(error) => panic!("ErrorBencoding: {:?}", error),
+                    Err(error) => return Err(Box::new(error)),
                 }
             }
-            Err(error) => panic!("MetadataError: {:?}", error),
+            Err(error) => return Err(Box::new(error)),
         }
     }
     #[test]
-    fn read_torrent3_ok() {
+    fn read_torrent3_ok() -> Result<(), Box<dyn Error>> {
         let file_dir = "torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
         match read_torrent_file(file_dir) {
             Ok(torrent_metadata) => {
@@ -126,11 +128,12 @@ mod tests {
                     Ok(dic_torrent) => {
                         let to_bencoding = bencoding::encoder::from_dic(dic_torrent);
                         assert_eq!(torrent_metadata, to_bencoding);
+                        Ok(())
                     }
-                    Err(error) => panic!("ErrorBencoding: {:?}", error),
+                    Err(error) => return Err(Box::new(error)),
                 }
             }
-            Err(error) => panic!("MetadataError: {:?}", error),
+            Err(error) => return Err(Box::new(error)),
         }
     }
     #[test]

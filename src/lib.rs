@@ -20,11 +20,12 @@ pub mod torrent;
 use crate::torrent::{
     client::peers_comunication,
     data::torrent_status::TorrentStatus,
+    entry_files_management,
     local_peer::{communicate_with_tracker, create_torrent},
 };
 
-use log::{debug, error, info, trace};
-use std::{env, error::Error};
+use log::{debug, info, trace};
+use std::error::Error;
 
 /// Funcion principal de ejecución del programa.
 /// (En su version actual) Realiza todo lo necesario para descargar una pieza válida a partir de un archivo .torrent dado por consola.
@@ -34,13 +35,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
     info!("Iniciando el programa");
 
-    let file_path = match env::args().nth(1) {
-        Some(file) => file,
-        None => {
-            error!("No se ingreso archivo por terminal");
-            return Ok(());
-        }
-    };
+    let files_list = entry_files_management::create_list_files()?;
+    let file_path = files_list[0].clone();
     debug!("Archivo ingresado: {}", file_path);
     info!("Archivo ingresado con exito");
 
@@ -59,7 +55,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     info!("El Client fue creado exitosamente");
 
     info!("Inicio de comunicacion con tracker mediante Client");
-    let tracker_response = communicate_with_tracker(torrent_file.clone())?;
+    let tracker_response = communicate_with_tracker(&torrent_file)?;
     info!("Comunicacion con el tracker exitosa");
 
     info!("Inicio de comunicacion con peers.");

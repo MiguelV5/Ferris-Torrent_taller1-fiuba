@@ -3,6 +3,7 @@
 
 pub mod client;
 pub mod data;
+pub mod entry_files_management;
 pub mod local_peer;
 pub mod parsers;
 pub mod server;

@@ -6,7 +6,7 @@
 
 extern crate sha1;
 
-use native_tls::{TlsConnector, TlsStream};
+use native_tls::TlsConnector;
 
 use super::constants::*;
 use crate::torrent::{
@@ -27,6 +27,10 @@ use std::{
 
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 type ResultMsg<T> = Result<T, ErrorMsgHttp>;
+
+pub trait ReadAndWrite: Read + Write {}
+
+impl<T: Read + Write> ReadAndWrite for T {}
 
 ///Enumerado que representa los tipos de error que pueden surgir en comunicación con tracker
 #[derive(Debug, PartialEq)]
@@ -83,9 +87,9 @@ fn init_info_hash(vec_sha1: Vec<u8>) -> String {
 fn init_host(tracker: String) -> ResultMsg<String> {
     let u8_tracker = tracker.as_bytes();
     //Voy a quitar todo lo que este por detras del "//"
-    match find_index_msg(u8_tracker, TWO, TWO_SLASH) {
+    match find_index_msg(u8_tracker, THREE, HTTP_END) {
         Some(pos) => {
-            let first = pos + TWO;
+            let first = pos + THREE;
             //Voy a quitar todo lo que este por delante del ":"
             match find_index_msg(&u8_tracker[first..], ONE, TWO_POINTS) {
                 Some(pos) => {
@@ -115,7 +119,7 @@ impl MsgDescriptor {
     ///Funcion que va a crear un MsgDescriptor, la cual necesita para crearse un TorrentFileData y
     /// un peer_id, esta estructura va a servir para crear el mensaje de request al tracker
     ///
-    pub fn new(torrent: TorrentFileData, peer_id: String) -> ResultMsg<Self> {
+    pub fn new(torrent: &TorrentFileData, peer_id: String) -> ResultMsg<Self> {
         let info_hash = init_info_hash(torrent.get_info_hash());
         let ip = String::from(IP_CLIENT);
         let port = INIT_PORT;
@@ -223,6 +227,34 @@ impl MsgDescriptor {
 // Struct que representa un manejador general de comunicacion Http con un tracker especifico
 pub struct HttpHandler {
     msg_get: MsgDescriptor,
+    port: String,
+}
+
+fn is_https(protocol: &[u8]) -> bool {
+    let https = "https".as_bytes();
+    https == protocol
+}
+
+fn init_port(tracker_main: String) -> String {
+    let u8_tracker = tracker_main.as_bytes();
+    match find_index_msg(u8_tracker, THREE, HTTP_END) {
+        Some(pos) => {
+            if is_https(&u8_tracker[..pos]) {
+                return PORT_HTTPS.to_string();
+            }
+            let first = pos + THREE;
+            match find_index_msg(&u8_tracker[first..], ONE, TWO_POINTS) {
+                Some(pos_port) => match find_index_msg(&u8_tracker[first..], ONE, LAST_SLASH) {
+                    Some(pos_slash) => {
+                        vec_u8_to_string(&u8_tracker[first + pos_port..first + pos_slash])
+                    }
+                    None => vec_u8_to_string(&u8_tracker[first + pos_port..]),
+                },
+                None => PORT_HTTPS.to_string(),
+            }
+        }
+        None => PORT_HTTPS.to_string(),
+    }
 }
 
 impl HttpHandler {
@@ -230,9 +262,11 @@ impl HttpHandler {
     /// ya sea enviandole la request y recibiendo su respuesta y devolviendola en el HashMap correspondiente,
     /// esta estructura contiene una estructura MsgDescriptor que va a ser la que creara el request con el tracker,
     /// Para crear el HttpHandler necesitamos pasarle el TorrentFileData correspondiente al .torrent y un peer_id
-    pub fn new(torrent: TorrentFileData, peer_id: String) -> ResultMsg<Self> {
+    pub fn new(torrent: &TorrentFileData, peer_id: String) -> ResultMsg<Self> {
+        let tracker_main = torrent.get_tracker_main();
         Ok(HttpHandler {
             msg_get: MsgDescriptor::new(torrent, peer_id)?,
+            port: init_port(tracker_main),
         })
     }
 
@@ -251,16 +285,31 @@ impl HttpHandler {
         self.msg_get.update_download_stats(more_down, more_up)
     }
 
+    pub fn connect_tcp(&self) -> ResultMsg<Box<dyn ReadAndWrite>> {
+        let mut addr = self.get_host();
+        addr.push_str(&self.port);
+        debug!("Conectando TCP con addr: {}", addr);
+
+        let connection = match TcpStream::connect(addr) {
+            Ok(tcp_conected) => tcp_conected,
+            Err(_) => {
+                error!("Error al comunicarse con Tcp");
+                return Err(ErrorMsgHttp::ConnectTcp);
+            }
+        };
+        Ok(Box::new(connection))
+    }
+
     ///Funcion que sirve para conectarse con el tracker correspondiente, en caso de que alguna de las conexiones
     /// falle se devolvera el error correspondiente
-    pub fn connect(&self) -> ResultMsg<TlsStream<TcpStream>> {
+    pub fn connect_tls(&self) -> ResultMsg<Box<dyn ReadAndWrite>> {
         let connector = match TlsConnector::new() {
             Ok(conected) => conected,
             Err(_) => return Err(ErrorMsgHttp::CreateTls),
         };
 
         let mut addr = self.get_host();
-        addr.push_str(PORT_CLIENT);
+        addr.push_str(&self.port);
         debug!("Conectando TCP con addr: {}", addr);
 
         let stream = match TcpStream::connect(addr) {
@@ -280,7 +329,7 @@ impl HttpHandler {
                 return Err(ErrorMsgHttp::ConnectTls);
             }
         };
-        Ok(connection)
+        Ok(Box::new(connection))
     }
 
     fn check_http_code(&self, response: &[u8]) -> ResultMsg<()> {
@@ -348,7 +397,13 @@ impl HttpHandler {
     /// -En caso de que haya un error en el envio del request o recepcion de la respuesta se devolvera el error
     ///  correspondiente
     pub fn tracker_get_response(&self) -> ResultMsg<DicValues> {
-        let mut connector = self.connect()?;
+        let https_port = String::from(PORT_HTTPS);
+
+        let mut connector = if self.port == https_port {
+            self.connect_tls()?
+        } else {
+            self.connect_tcp()?
+        };
 
         let get_msg = self.get_send_msg()?;
         trace!("Enviando request al tracker");
@@ -378,24 +433,23 @@ mod test {
     use crate::torrent::client::medatada_analyzer::read_torrent_file_to_dic;
 
     #[test]
-    fn test_creation_file1_ok() {
+    fn test_creation_file1_ok() -> Result<(), Box<dyn Error>> {
         let dir = "torrents_for_test/ubuntu-22.04-desktop-amd64.iso.torrent";
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("{}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("{}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
-        let http_handler =
-            match HttpHandler::new(torrent.clone(), "ABCDEFGHIJKLMNOPQRST".to_string()) {
-                Ok(handler) => handler,
-                Err(error) => panic!("{}", error),
-            };
+        let http_handler = match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string()) {
+            Ok(handler) => handler,
+            Err(error) => return Err(Box::new(error)),
+        };
         let info_hash = init_info_hash(torrent.get_info_hash());
 
         let mut msg_get_expected = String::from("GET /announce");
@@ -406,27 +460,28 @@ mod test {
         msg_get_expected.push_str(&torrent.get_total_length().to_string());
         msg_get_expected.push_str("&event=started HTTP/1.0\r\nHost:torrent.ubuntu.com\r\n\r\n");
 
-        assert_eq!(http_handler.get_send_msg(), Ok(msg_get_expected))
+        assert_eq!(http_handler.get_send_msg(), Ok(msg_get_expected));
+        Ok(())
     }
+
     #[test]
-    fn test_creation_file2_ok() {
+    fn test_creation_file2_ok() -> Result<(), Box<dyn Error>> {
         let dir = "torrents_for_test/big-buck-bunny.torrent";
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("{}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("{}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
-        let http_handler =
-            match HttpHandler::new(torrent.clone(), "ABCDEFGHIJKLMNOPQRST".to_string()) {
-                Ok(handler) => handler,
-                Err(error) => panic!("{}", error),
-            };
+        let http_handler = match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string()) {
+            Ok(handler) => handler,
+            Err(error) => return Err(Box::new(error)),
+        };
         let info_hash = init_info_hash(torrent.get_info_hash());
 
         let mut msg_get_expected = String::from("GET /announce");
@@ -443,27 +498,28 @@ mod test {
         msg_get_expected.push_str(http_handler.msg_get.get_host().as_str());
         msg_get_expected.push_str("\r\n\r\n");
 
-        assert_eq!(http_handler.get_send_msg(), Ok(msg_get_expected))
+        assert_eq!(http_handler.get_send_msg(), Ok(msg_get_expected));
+        Ok(())
     }
+
     #[test]
-    fn test_creation_file3_ok() {
+    fn test_creation_file3_ok() -> Result<(), Box<dyn Error>> {
         let dir = "torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("{}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("{}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
-        let http_handler =
-            match HttpHandler::new(torrent.clone(), "ABCDEFGHIJKLMNOPQRST".to_string()) {
-                Ok(handler) => handler,
-                Err(error) => panic!("{}", error),
-            };
+        let http_handler = match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string()) {
+            Ok(handler) => handler,
+            Err(error) => return Err(Box::new(error)),
+        };
         let info_hash = init_info_hash(torrent.get_info_hash());
 
         let mut msg_get_expected = String::from("GET /announce");
@@ -480,27 +536,28 @@ mod test {
         msg_get_expected.push_str(http_handler.msg_get.get_host().as_str());
         msg_get_expected.push_str("\r\n\r\n");
 
-        assert_eq!(http_handler.get_send_msg(), Ok(msg_get_expected))
+        assert_eq!(http_handler.get_send_msg(), Ok(msg_get_expected));
+        Ok(())
     }
+
     #[test]
-    fn test_check_http_code() {
+    fn test_check_http_code() -> Result<(), Box<dyn Error>> {
         let dir = "torrents_for_test/ubuntu-22.04-desktop-amd64.iso.torrent";
 
         let dic_torrent = match read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
-            Err(error) => panic!("{}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
         let torrent = match TorrentFileData::new(dic_torrent) {
             Ok(struct_torrent) => struct_torrent,
-            Err(error) => panic!("{}", error),
+            Err(error) => return Err(Box::new(error)),
         };
 
-        let http_handler =
-            match HttpHandler::new(torrent.clone(), "ABCDEFGHIJKLMNOPQRST".to_string()) {
-                Ok(handler) => handler,
-                Err(error) => panic!("{}", error),
-            };
+        let http_handler = match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string()) {
+            Ok(handler) => handler,
+            Err(error) => return Err(Box::new(error)),
+        };
 
         let response = http_handler.check_http_code("HTTP/1.1 200 OK".as_bytes());
         assert_eq!(response, Ok(()));
@@ -510,5 +567,6 @@ mod test {
             response,
             Err(ErrorMsgHttp::HttpDescription("400: NOT FOUND".to_owned()))
         );
+        Ok(())
     }
 }

@@ -204,7 +204,7 @@ pub fn create_torrent(torrent_path: &str) -> ResultClient<TorrentFileData> {
 /// Funcion que realiza toda la comunicación con el tracker, interpreta su
 /// respuesta y devuelve la info importante de la misma
 ///
-pub fn communicate_with_tracker(torrent: TorrentFileData) -> ResultClient<TrackerResponseData> {
+pub fn communicate_with_tracker(torrent: &TorrentFileData) -> ResultClient<TrackerResponseData> {
     let str_peer_id = String::from_utf8_lossy(&generate_peer_id()).to_string();
     trace!("Creando httpHandler dentro del Client");
     let http_handler = match HttpHandler::new(torrent, str_peer_id) {
