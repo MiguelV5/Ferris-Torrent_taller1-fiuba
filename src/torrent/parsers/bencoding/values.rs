@@ -31,7 +31,7 @@ pub enum ErrorType {
 
 impl fmt::Display for ErrorBencoding {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 

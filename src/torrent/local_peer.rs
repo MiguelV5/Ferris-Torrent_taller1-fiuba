@@ -7,7 +7,7 @@ use crate::torrent::{
         block_handler,
         medatada_analyzer::{read_torrent_file_to_dic, MetadataError},
         peers_comunication::{
-            msg_logic_control::MsgLogicControlError,
+            handler::InteractionHandlerError,
             msg_receiver::{self, MsgReceiverError},
             msg_sender::{self, MsgSenderError},
         },
@@ -30,7 +30,7 @@ use log::{debug, error, info, trace};
 use rand::{distributions::Alphanumeric, Rng};
 use std::{error::Error, fmt, net::TcpStream, time::Duration};
 
-use super::client::peers_comunication::handler::HandlerInteractionStatus;
+use super::client::peers_comunication::handler::InteractionHandlerStatus;
 
 const SIZE_PEER_ID: usize = 12;
 const INIT_PEER_ID: &str = "-FA0000-";
@@ -58,21 +58,28 @@ pub struct LocalPeer {
 #[derive(PartialEq, Debug)]
 // Representa posibles errores durante la ejecucion de alguna de sus funcionalidades
 pub enum ClientError {
-    File(MetadataError),
+    MetadataObtention(MetadataError),
     HttpCreation(ErrorMsgHttp),
-    ConectionError(ErrorMsgHttp),
+    TrackerConnection(ErrorMsgHttp),
     TorrentCreation(TorrentFileDataError),
-    Response(ResponseError),
-    PeerCommunication(MsgLogicControlError),
+    TrackerResponseObtention(ResponseError),
+    PeerCommunication(InteractionHandlerError),
 }
 
 impl fmt::Display for ClientError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error del torrent.\n Backtrace: {:?}\n", self)
+        write!(f, "\n Error backtrace:    {:#?}\n", self)
     }
 }
 
 impl Error for ClientError {}
+
+//Ver si corresponde este enum en otro lugar
+/// Enum para distincion de almacenamiento al recibir un mensaje Piece
+enum InterestOfReceivedPieceMsg {
+    AlreadyDownloaded,
+    IsCorrectlyAsRequested,
+}
 
 /// Funcion que crea un peer id unico para este cliente como peer
 ///
@@ -90,20 +97,20 @@ pub fn generate_peer_id() -> Vec<u8> {
 fn open_connection_with_peer(
     tracker_response_data: &TrackerResponseData,
     tracker_response_peer_index: usize,
-) -> Result<TcpStream, MsgLogicControlError> {
+) -> Result<TcpStream, InteractionHandlerError> {
     if let Some(peer_address) = tracker_response_data.get_peer_address(tracker_response_peer_index)
     {
         let stream = TcpStream::connect(peer_address)
-            .map_err(|error| MsgLogicControlError::ConectingWithPeer(format!("{:?}", error)))?;
+            .map_err(|error| InteractionHandlerError::ConectingWithPeer(format!("{}", error)))?;
 
         stream
             .set_read_timeout(Some(Duration::new(SECS_READ_TIMEOUT, NANOS_READ_TIMEOUT)))
-            .map_err(|err| MsgLogicControlError::ConectingWithPeer(format!("{:?}", err)))?;
+            .map_err(|err| InteractionHandlerError::ConectingWithPeer(format!("{}", err)))?;
         return Ok(stream);
     }
 
-    Err(MsgLogicControlError::ConectingWithPeer(String::from(
-        "[MsgLogicControlError] Client peer doesn`t have a tracker response.",
+    Err(InteractionHandlerError::ConectingWithPeer(String::from(
+        "[InteractionHandlerError] Client peer doesn`t have a tracker response.",
     )))
 }
 //HANDSHAKE
@@ -114,15 +121,15 @@ fn check_handshake(
     server_info_hash: &[u8],
     server_peer_id: &[u8],
     tracker_response_peer_index: usize,
-) -> Result<(), MsgLogicControlError> {
+) -> Result<(), InteractionHandlerError> {
     if (server_protocol_str == PSTR_STRING_HANDSHAKE)
         && torrent_file_data.has_expected_info_hash(server_info_hash)
         && tracker_response_data.has_expected_peer_id(tracker_response_peer_index, server_peer_id)
     {
         Ok(())
     } else {
-        Err(MsgLogicControlError::CheckingAndSavingHandshake(
-            "[MsgLogicControlError] The received handshake hasn`t got the expected fields."
+        Err(InteractionHandlerError::CheckingAndSavingHandshake(
+            "[InteractionHandlerError] The received handshake hasn`t got the expected fields."
                 .to_string(),
         ))
     }
@@ -136,7 +143,7 @@ pub fn generate_peer_data_from_handshake(
     torrent_file_data: &TorrentFileData,
     tracker_response_data: &TrackerResponseData,
     tracker_response_peer_index: usize,
-) -> Result<PeerDataForP2PCommunication, MsgLogicControlError> {
+) -> Result<PeerDataForP2PCommunication, InteractionHandlerError> {
     if let P2PMessage::Handshake {
         protocol_str: server_protocol_str,
         info_hash: server_info_hash,
@@ -156,8 +163,8 @@ pub fn generate_peer_data_from_handshake(
             server_peer_id,
         ))
     } else {
-        Err(MsgLogicControlError::CheckingAndSavingHandshake(
-            "[MsgLogicControlError] The received messagge is not a handshake.".to_string(),
+        Err(InteractionHandlerError::CheckingAndSavingHandshake(
+            "[InteractionHandlerError] The received messagge is not a handshake.".to_string(),
         ))
     }
 }
@@ -187,7 +194,7 @@ pub fn create_torrent(torrent_path: &str) -> ResultClient<TorrentFileData> {
         Ok(dictionary) => dictionary,
         Err(error) => {
             error!("Error del cliente al leer archivo y pasarlo a HashMap");
-            return Err(ClientError::File(error));
+            return Err(ClientError::MetadataObtention(error));
         }
     };
     trace!("Arhivo leido y pasado a HashMap exitosamente");
@@ -221,7 +228,7 @@ pub fn communicate_with_tracker(torrent: &TorrentFileData) -> ResultClient<Track
         Err(error) => {
             return {
                 error!("Error del cliente al conectarse con el Tracker");
-                Err(ClientError::ConectionError(error))
+                Err(ClientError::TrackerConnection(error))
             }
         }
     };
@@ -230,7 +237,7 @@ pub fn communicate_with_tracker(torrent: &TorrentFileData) -> ResultClient<Track
         Ok(response_struct) => Ok(response_struct),
         Err(error) => {
             error!("Error del cliente al recibir respuesta del Tracker");
-            Err(ClientError::Response(error))
+            Err(ClientError::TrackerResponseObtention(error))
         }
     }
 }
@@ -241,33 +248,11 @@ impl LocalPeer {
     /// su uso posterior en comunicacion con peers, devolviendo así
     /// una instancia de la estructura lista para ello.
     ///
-    pub fn new(
-        external_peer_data: PeerDataForP2PCommunication,
-        stream: TcpStream,
-        role: PeerRole,
-    ) -> ResultClient<Self> {
-        trace!("Genero peer_id");
-        let peer_id = generate_peer_id();
-
-        // Los comento porque despues hay que meterlos en la funcion principal de la app (el run())
-        // let torrent_file = create_torrent(path_file)?;
-        // trace!("TorrentFileData creado y almacenado dentro del Client");
-        // let info_hash = torrent_file.get_info_hash();
-        // let torrent_size = torrent_file.get_total_size() as u64;
-        // let torrent_status = TorrentStatus::new(torrent_size, torrent_file.total_amount_of_pieces);
-        Ok(LocalPeer {
-            peer_id,
-            stream,
-            external_peer_data,
-            role,
-        })
-    }
-
     pub fn start_communication(
         torrent_file_data: &TorrentFileData,
         tracker_response_data: &TrackerResponseData,
         tracker_response_peer_index: usize,
-    ) -> Result<Self, MsgLogicControlError> {
+    ) -> Result<Self, InteractionHandlerError> {
         //GENERO PEER ID
         let peer_id = generate_peer_id();
         trace!("Genero peer_id");
@@ -281,9 +266,9 @@ impl LocalPeer {
         msg_sender::send_handshake(&mut local_peer_stream, &peer_id, torrent_file_data).map_err(
             |error| {
                 if let MsgSenderError::WriteToTcpStream(_) = error {
-                    MsgLogicControlError::ConectingWithPeer(format!("{:?}", error))
+                    InteractionHandlerError::ConectingWithPeer(format!("{}", error))
                 } else {
-                    MsgLogicControlError::SendingHandshake(format!("{:?}", error))
+                    InteractionHandlerError::SendingHandshake(format!("{}", error))
                 }
             },
         )?;
@@ -293,9 +278,9 @@ impl LocalPeer {
         let received_handshake =
             msg_receiver::receive_handshake(&mut local_peer_stream).map_err(|error| {
                 if let MsgReceiverError::ReadingFromTcpStream(_) = error {
-                    MsgLogicControlError::ConectingWithPeer(format!("{:?}", error))
+                    InteractionHandlerError::ConectingWithPeer(format!("{}", error))
                 } else {
-                    MsgLogicControlError::ReceivingHanshake(format!("{:?}", error))
+                    InteractionHandlerError::ReceivingHanshake(format!("{}", error))
                 }
             })?;
         info!("Mensaje recibido: Handshake.");
@@ -315,19 +300,6 @@ impl LocalPeer {
         })
     }
 
-    /// Funcion que realiza toda la comunicación con el tracker, interpreta su
-    /// respuesta y almacena la info importante de la misma
-    ///
-    // pub fn communicate_with_tracker(&mut self) -> ResultClient<()> {
-    //     match communicate_with_tracker(self.torrent_file.clone()) {
-    //         Ok(response) => self.tracker_response = Some(response),
-    //         Err(error) => return Err(error),
-    //     };
-    //     trace!("TrackerResponseData creado y almacenado dentro del Client");
-    //     Ok(())
-    // }
-    // Miguel: creo que no tiene mucho sentido tener esto como metodo del LocalPeer
-
     //BITFIELD
     /// Funcion que actualiza la representación de bitfield de un peer dado
     /// por su indice
@@ -336,10 +308,10 @@ impl LocalPeer {
         &mut self,
         torrent_file_data: &TorrentFileData,
         mut bitfield: Vec<PieceStatus>,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         torrent_file_data
             .check_bitfield(&bitfield)
-            .map_err(|err| MsgLogicControlError::UpdatingBitfield(format!("{:?}", err)))?;
+            .map_err(|err| InteractionHandlerError::UpdatingBitfield(format!("{}", err)))?;
         bitfield.truncate(torrent_file_data.get_total_amount_pieces());
         self.external_peer_data.update_pieces_availability(bitfield);
         Ok(())
@@ -355,10 +327,10 @@ impl LocalPeer {
         &mut self,
         piece_index: usize,
         new_status: PieceStatus,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         self.external_peer_data
             .update_piece_status(piece_index, new_status)
-            .map_err(|err| MsgLogicControlError::UpdatingPieceStatus(format!("{:?}", err)))?;
+            .map_err(|err| InteractionHandlerError::UpdatingPieceStatus(format!("{}", err)))?;
         Ok(())
     }
 
@@ -368,32 +340,33 @@ impl LocalPeer {
         torrent_status: &TorrentStatus,
         piece_index: usize,
         beginning_byte_index: u32,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<InterestOfReceivedPieceMsg, InteractionHandlerError> {
         match torrent_status.get_piece_status(piece_index) {
             Some(piece_status) => match *piece_status {
-                PieceStatus::ValidAndAvailablePiece => {
-                    return Err(MsgLogicControlError::StoringBlock(
-                        "[MsgLogicControlError] The client peer has already completed that piece."
+                PieceStatus::MissingPiece => Ok(InterestOfReceivedPieceMsg::IsCorrectlyAsRequested),
+                PieceStatus::ValidAndAvailablePiece => Err(InteractionHandlerError::StoringBlock(
+                    "[InteractionHandlerError] The client peer has already completed that piece."
+                        .to_string(),
+                )),
+                PieceStatus::PartiallyDownloaded { downloaded_bytes }
+                    if beginning_byte_index > downloaded_bytes =>
+                {
+                    Err(InteractionHandlerError::StoringBlock(
+                        "[InteractionHandlerError] The beginning byte index is incorrect."
                             .to_string(),
                     ))
                 }
-                PieceStatus::PartiallyDownloaded { downloaded_bytes } => {
-                    if downloaded_bytes != beginning_byte_index {
-                        return Err(MsgLogicControlError::StoringBlock(
-                            "[MsgLogicControlError] The beginning byte index is incorrect."
-                                .to_string(),
-                        ));
-                    }
+                PieceStatus::PartiallyDownloaded { downloaded_bytes }
+                    if beginning_byte_index < downloaded_bytes =>
+                {
+                    Ok(InterestOfReceivedPieceMsg::AlreadyDownloaded)
                 }
-                _ => (),
+                _ => Ok(InterestOfReceivedPieceMsg::IsCorrectlyAsRequested),
             },
-            None => {
-                return Err(MsgLogicControlError::StoringBlock(
-                    "[MsgLogicControlError] The received piece index is invalid.".to_string(),
-                ))
-            }
-        };
-        Ok(())
+            None => Err(InteractionHandlerError::StoringBlock(
+                "[InteractionHandlerError] The received piece index is invalid.".to_string(),
+            )),
+        }
     }
 
     fn check_block_lenght(
@@ -403,22 +376,22 @@ impl LocalPeer {
         piece_index: usize,
         beginning_byte_index: u32,
         block: &[u8],
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<InterestOfReceivedPieceMsg, InteractionHandlerError> {
         let expected_amount_of_bytes = torrent_status
             .calculate_amount_of_bytes_of_block(
                 torrent_file_data,
                 piece_index,
                 beginning_byte_index,
             )
-            .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?
+            .map_err(|err| InteractionHandlerError::StoringBlock(format!("{}", err)))?
             .try_into()
-            .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
+            .map_err(|err| InteractionHandlerError::StoringBlock(format!("{}", err)))?;
         if block.len() != expected_amount_of_bytes {
-            return Err(MsgLogicControlError::StoringBlock(
-                "[MsgLogicControlError] Block length is not as expected".to_string(),
+            return Err(InteractionHandlerError::StoringBlock(
+                "[InteractionHandlerError] Block length is not as expected".to_string(),
             ));
         }
-        Ok(())
+        Ok(InterestOfReceivedPieceMsg::IsCorrectlyAsRequested)
     }
 
     fn check_store_block(
@@ -428,12 +401,18 @@ impl LocalPeer {
         piece_index: usize,
         beginning_byte_index: u32,
         block: &[u8],
-    ) -> Result<(), MsgLogicControlError> {
-        self.check_piece_index_and_beginning_byte_index(
+    ) -> Result<InterestOfReceivedPieceMsg, InteractionHandlerError> {
+        match self.check_piece_index_and_beginning_byte_index(
             torrent_status,
             piece_index,
             beginning_byte_index,
-        )?;
+        ) {
+            Ok(InterestOfReceivedPieceMsg::IsCorrectlyAsRequested) => (),
+            Ok(InterestOfReceivedPieceMsg::AlreadyDownloaded) => {
+                return Ok(InterestOfReceivedPieceMsg::AlreadyDownloaded)
+            }
+            Err(error) => return Err(error),
+        }
         self.check_block_lenght(
             torrent_file_data,
             torrent_status,
@@ -441,7 +420,7 @@ impl LocalPeer {
             beginning_byte_index,
             block,
         )?;
-        Ok(())
+        Ok(InterestOfReceivedPieceMsg::IsCorrectlyAsRequested)
     }
 
     fn check_piece(
@@ -450,12 +429,12 @@ impl LocalPeer {
         torrent_status: &mut TorrentStatus,
         path: &str,
         piece_index: usize,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         if torrent_status.is_a_valid_and_available_piece(piece_index) {
             info!("Se completó la pieza {}.", piece_index);
             info!("Verifico el hash SHA1 de la pieza descargada.");
             block_handler::check_sha1_piece(torrent_file_data, piece_index, path)
-                .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
+                .map_err(|err| InteractionHandlerError::StoringBlock(format!("{}", err)))?;
         }
         Ok(())
     }
@@ -475,16 +454,20 @@ impl LocalPeer {
         piece_index: usize,
         beginning_byte_index: u32,
         block: Vec<u8>,
-    ) -> Result<(), MsgLogicControlError> {
-        self.check_store_block(
+    ) -> Result<(), InteractionHandlerError> {
+        match self.check_store_block(
             torrent_file_data,
             &*torrent_status,
             piece_index,
             beginning_byte_index,
             &block,
-        )?;
+        ) {
+            Ok(InterestOfReceivedPieceMsg::AlreadyDownloaded) => return Ok(()),
+            Ok(InterestOfReceivedPieceMsg::IsCorrectlyAsRequested) => (),
+            Err(error) => return Err(error),
+        };
         block_handler::store_block(&block, piece_index, path)
-            .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
+            .map_err(|err| InteractionHandlerError::StoringBlock(format!("{}", err)))?;
 
         torrent_status
             .update_piece_status(
@@ -492,9 +475,9 @@ impl LocalPeer {
                 piece_index,
                 beginning_byte_index,
                 u32::try_from(block.len())
-                    .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?,
+                    .map_err(|err| InteractionHandlerError::StoringBlock(format!("{}", err)))?,
             )
-            .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
+            .map_err(|err| InteractionHandlerError::StoringBlock(format!("{}", err)))?;
 
         self.check_piece(torrent_file_data, torrent_status, path, piece_index)?;
         Ok(())
@@ -504,7 +487,10 @@ impl LocalPeer {
 
     /// Funcion que actualiza si mi cliente tiene chokeado a un peer especifico
     ///
-    pub fn update_am_choking_field(&mut self, new_value: bool) -> Result<(), MsgLogicControlError> {
+    pub fn update_am_choking_field(
+        &mut self,
+        new_value: bool,
+    ) -> Result<(), InteractionHandlerError> {
         self.external_peer_data.am_choking = new_value;
         Ok(())
     }
@@ -515,7 +501,7 @@ impl LocalPeer {
     pub fn update_am_interested_field(
         &mut self,
         new_value: bool,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         self.external_peer_data.am_interested = new_value;
         Ok(())
     }
@@ -526,7 +512,7 @@ impl LocalPeer {
         //esta funcion ya no sirve para nada
         &mut self,
         new_value: bool,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         self.external_peer_data.peer_choking = new_value;
         Ok(())
     }
@@ -536,7 +522,7 @@ impl LocalPeer {
     pub fn update_peer_interested_field(
         &mut self,
         new_value: bool,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         self.external_peer_data.peer_interested = new_value;
         Ok(())
     }
@@ -578,20 +564,48 @@ impl LocalPeer {
         self.external_peer_data.pieces_availability[position] == PieceStatus::ValidAndAvailablePiece
     }
 
+    fn react_to_received_piece_msg(
+        &mut self,
+        piece_index: u32,
+        beginning_byte_index: u32,
+        block: Vec<u8>,
+        torrent_file_data: &TorrentFileData,
+        torrent_status: &mut TorrentStatus,
+    ) -> Result<(), InteractionHandlerError> {
+        let temp_path_name = torrent_file_data.get_torrent_representative_name();
+        let piece_index = piece_index
+            .try_into()
+            .map_err(|err| InteractionHandlerError::StoringBlock(format!("{}", err)))?;
+        self.store_block(
+            torrent_file_data,
+            torrent_status,
+            &temp_path_name,
+            piece_index,
+            beginning_byte_index,
+            block,
+        )?;
+
+        debug!(
+            "Nuevo estado de la pieza {}: {:?}",
+            piece_index, torrent_status.pieces_availability[piece_index as usize]
+        );
+        Ok(())
+    }
+
     //UPDATE INFORMATION
     fn update_information_according_to_the_received_msg(
         &mut self,
         torrent_file_data: &TorrentFileData,
         torrent_status: &mut TorrentStatus,
         received_msg: P2PMessage,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         match received_msg {
             P2PMessage::KeepAlive => Ok(()),
             P2PMessage::Choke => self.update_peer_choking_field(true),
             P2PMessage::Unchoke => self.update_peer_choking_field(false),
             P2PMessage::Have { piece_index } => self.update_server_peer_piece_status(
                 usize::try_from(piece_index)
-                    .map_err(|err| MsgLogicControlError::LookingForPieces(format!("{:?}", err)))?,
+                    .map_err(|err| InteractionHandlerError::LookingForPieces(format!("{}", err)))?,
                 PieceStatus::ValidAndAvailablePiece,
             ),
             P2PMessage::Bitfield { bitfield } => {
@@ -602,24 +616,14 @@ impl LocalPeer {
                 beginning_byte_index,
                 block,
             } => {
-                let temp_path_name = torrent_file_data.get_torrent_representative_name();
-                let piece_index = piece_index
-                    .try_into()
-                    .map_err(|err| MsgLogicControlError::StoringBlock(format!("{:?}", err)))?;
-                self.store_block(
-                    torrent_file_data,
-                    torrent_status,
-                    &temp_path_name,
+                self.react_to_received_piece_msg(
                     piece_index,
                     beginning_byte_index,
                     block,
+                    torrent_file_data,
+                    torrent_status,
                 )?;
 
-                debug!(
-                    "Nuevo estado de la pieza {}: {:?}",
-                    piece_index,
-                    torrent_status.pieces_availability[piece_index as usize] // (Miguel)REVISAR: Estaba indexado con un cero
-                );
                 Ok(())
             }
             _ => Ok(()),
@@ -633,14 +637,14 @@ impl LocalPeer {
         piece_index: usize,
         torrent_file_data: &TorrentFileData,
         torrent_status: &TorrentStatus,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         if self.peer_choking() {
             info!("Mensaje enviado: Interested");
             msg_sender::send_interested(&mut self.stream).map_err(|err| {
                 if let MsgSenderError::WriteToTcpStream(_) = err {
-                    MsgLogicControlError::ConectingWithPeer(format!("{:?}", err))
+                    InteractionHandlerError::ConectingWithPeer(format!("{}", err))
                 } else {
-                    MsgLogicControlError::SendingMessage(format!("{:?}", err))
+                    InteractionHandlerError::SendingMessage(format!("{}", err))
                 }
             })?;
         } else {
@@ -652,9 +656,9 @@ impl LocalPeer {
             )
             .map_err(|err| {
                 if let MsgSenderError::WriteToTcpStream(_) = err {
-                    MsgLogicControlError::ConectingWithPeer(format!("{:?}", err))
+                    InteractionHandlerError::ConectingWithPeer(format!("{}", err))
                 } else {
-                    MsgLogicControlError::SendingMessage(format!("{:?}", err))
+                    InteractionHandlerError::SendingMessage(format!("{}", err))
                 }
             })?;
         }
@@ -666,7 +670,7 @@ impl LocalPeer {
         &mut self,
         torrent_file_data: &TorrentFileData,
         torrent_status: &TorrentStatus,
-    ) -> Result<(), MsgLogicControlError> {
+    ) -> Result<(), InteractionHandlerError> {
         let piece_index = match torrent_status.look_for_a_missing_piece_index(&*self) {
             Some(piece_index) => {
                 self.update_am_interested_field(true)?;
@@ -692,15 +696,15 @@ impl LocalPeer {
         &mut self,
         torrent_file_data: &TorrentFileData,
         torrent_status: &mut TorrentStatus,
-    ) -> Result<HandlerInteractionStatus, MsgLogicControlError> {
+    ) -> Result<InteractionHandlerStatus, InteractionHandlerError> {
         loop {
             //RECIBO UN MENSAJE
             let received_msg =
                 msg_receiver::receive_message(&mut self.stream).map_err(|error| {
                     if let MsgReceiverError::ReadingFromTcpStream(_) = error {
-                        MsgLogicControlError::ConectingWithPeer(format!("{:?}", error))
+                        InteractionHandlerError::ConectingWithPeer(format!("{}", error))
                     } else {
-                        MsgLogicControlError::ReceivingMessage(format!("{:?}", error))
+                        InteractionHandlerError::ReceivingMessage(format!("{}", error))
                     }
                 })?;
             log_info_msg(&received_msg);
@@ -718,13 +722,13 @@ impl LocalPeer {
             //VERIFICO SI DEBO CORTAR LA INTERACCION
             if !self.am_interested() {
                 info!("Se busca un nuevo peer al cual pedirle piezas");
-                return Ok(HandlerInteractionStatus::LookForAnotherPeer);
+                return Ok(InteractionHandlerStatus::LookForAnotherPeer);
             } else if torrent_status
                 .pieces_availability
                 .iter()
                 .any(|piece| *piece == PieceStatus::ValidAndAvailablePiece)
             {
-                return Ok(HandlerInteractionStatus::FinishInteraction);
+                return Ok(InteractionHandlerStatus::FinishInteraction);
             }
         }
     }
@@ -761,7 +765,7 @@ mod test_client {
 
     impl fmt::Display for TestingError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{:?}", self)
+            write!(f, "\n    {:#?}\n", self)
         }
     }
 
@@ -778,7 +782,7 @@ mod test_client {
 
     impl fmt::Display for PortBindingError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{:?}", self)
+            write!(f, "\n    {:#?}\n", self)
         }
     }
 
@@ -834,12 +838,12 @@ mod test_client {
 
         let handler = thread::spawn(move || listener.accept());
 
-        let stream = TcpStream::connect(address)?;
-        handler.join().unwrap()?; // feo pero para probar
+        let stream = TcpStream::connect(address.clone())?;
+        let _joined = handler.join();
 
         let server_peer = PeerDataFromTrackerResponse {
             peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
-            peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
+            peer_address: SocketAddr::from_str(&address)?,
         };
 
         let tracker_response = TrackerResponseData {
@@ -898,12 +902,12 @@ mod test_client {
 
         let handler = thread::spawn(move || listener.accept());
 
-        let stream = TcpStream::connect(address)?;
-        handler.join().unwrap()?; // feo pero para probar
+        let stream = TcpStream::connect(address.clone())?;
+        let _joined = handler.join();
 
         let server_peer = PeerDataFromTrackerResponse {
             peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
-            peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
+            peer_address: SocketAddr::from_str(&address)?,
         };
         let tracker_response = TrackerResponseData {
             interval: 0,
@@ -970,12 +974,12 @@ mod test_client {
 
         let handler = thread::spawn(move || listener.accept());
 
-        let stream = TcpStream::connect(address)?;
-        handler.join().unwrap()?; // feo pero para probar
+        let stream = TcpStream::connect(address.clone())?;
+        let _joined = handler.join();
 
         let server_peer = PeerDataFromTrackerResponse {
             peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
-            peer_address: SocketAddr::from_str(DEFAULT_ADDR)?,
+            peer_address: SocketAddr::from_str(&address)?,
         };
         let tracker_response = TrackerResponseData {
             interval: 0,
@@ -1115,7 +1119,6 @@ mod test_client {
 
             let (mut tracker_response, _, torrent_file_data, _) =
                 create_default_client_peer_with_unused_server_peer()?;
-            println!("Si esto se imprime entonces ya salio de la conexion");
 
             //MODIFICO EL CLIENTE PARA QUE NO TENGA LOS PEER_ID DE LOS SERVER PEER
             tracker_response.peers = vec![PeerDataFromTrackerResponse {
@@ -1318,7 +1321,7 @@ mod test_client {
     mod test_store_block {
         use std::fs;
 
-        use crate::torrent::client::peers_comunication::msg_logic_control::BLOCK_BYTES;
+        use crate::torrent::client::peers_comunication::handler::BLOCK_BYTES;
 
         use super::*;
 
@@ -1332,8 +1335,8 @@ mod test_client {
             let path = "test_client/store_block_1".to_string();
 
             assert_eq!(
-                Err(MsgLogicControlError::StoringBlock(
-                    "[MsgLogicControlError] Block length is not as expected".to_string()
+                Err(InteractionHandlerError::StoringBlock(
+                    "[InteractionHandlerError] Block length is not as expected".to_string()
                 )),
                 local_peer.store_block(
                     &torrent_file_data,
@@ -1358,8 +1361,8 @@ mod test_client {
             let path = "test_client/store_block_2".to_string();
 
             assert_eq!(
-                Err(MsgLogicControlError::StoringBlock(
-                    "[MsgLogicControlError] Block length is not as expected".to_string()
+                Err(InteractionHandlerError::StoringBlock(
+                    "[InteractionHandlerError] Block length is not as expected".to_string()
                 )),
                 local_peer.store_block(
                     &torrent_file_data,
@@ -1384,8 +1387,8 @@ mod test_client {
             let path = "test_client/store_block_3".to_string();
 
             assert_eq!(
-                Err(MsgLogicControlError::StoringBlock(
-                    "[MsgLogicControlError] The received piece index is invalid.".to_string(),
+                Err(InteractionHandlerError::StoringBlock(
+                    "[InteractionHandlerError] The received piece index is invalid.".to_string(),
                 )),
                 local_peer.store_block(
                     &torrent_file_data,
@@ -1486,8 +1489,8 @@ mod test_client {
             beginning_byte_index = 6000;
 
             assert_eq!(
-                Err(MsgLogicControlError::StoringBlock(
-                    "[MsgLogicControlError] The client peer has already completed that piece."
+                Err(InteractionHandlerError::StoringBlock(
+                    "[InteractionHandlerError] The client peer has already completed that piece."
                         .to_string(),
                 )),
                 local_peer.store_block(
@@ -1605,9 +1608,10 @@ mod test_client {
             let (_tracker_response, mut torrent_status, torrent_file_data, local_peer) =
                 create_default_client_peer_with_a_server_peer_that_has_the_whole_file()?;
             let piece_index = 0;
-            let beginning_byte_index = 0;
             let block_1 = [0; 16384].to_vec();
             let block_2 = [0; 16384].to_vec();
+            let beginning_byte_index1 = 0;
+            let beginning_byte_index2 = 20000;
             let path = "test_client/store_block_9".to_string();
             fs::create_dir(format!("temp/{}", path))?;
 
@@ -1616,20 +1620,32 @@ mod test_client {
                 &mut torrent_status,
                 &path,
                 piece_index,
-                beginning_byte_index,
-                block_1,
+                beginning_byte_index1,
+                block_1.clone(),
             )?;
 
             assert_eq!(
-                Err(MsgLogicControlError::StoringBlock(
-                    "[MsgLogicControlError] The beginning byte index is incorrect.".to_string(),
+                Ok(()),
+                local_peer.store_block(
+                    &torrent_file_data,
+                    &mut torrent_status,
+                    &path,
+                    piece_index,
+                    beginning_byte_index1,
+                    block_1
+                )
+            );
+
+            assert_eq!(
+                Err(InteractionHandlerError::StoringBlock(
+                    "[InteractionHandlerError] The beginning byte index is incorrect.".to_string(),
                 )),
                 local_peer.store_block(
                     &torrent_file_data,
                     &mut torrent_status,
                     &path,
                     piece_index,
-                    beginning_byte_index,
+                    beginning_byte_index2,
                     block_2
                 )
             );

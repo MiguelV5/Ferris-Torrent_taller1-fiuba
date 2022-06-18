@@ -3,14 +3,23 @@
 //! información de un peer obtenida durante comunicación P2P
 //!
 
-use crate::torrent::parsers::p2p::message::PieceStatus;
+use std::{error::Error, fmt};
 
 use super::torrent_file_data::TorrentFileData;
+use crate::torrent::parsers::p2p::message::PieceStatus;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum PeerDataForP2PCommunicationError {
     InvalidPieceIndexAtBitfield(String),
 }
+
+impl fmt::Display for PeerDataForP2PCommunicationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\n    {:#?}\n", self)
+    }
+}
+
+impl Error for PeerDataForP2PCommunicationError {}
 
 #[derive(PartialEq, Debug, Clone)]
 /// Representa la info importante de un peer al comunicarse con él de forma

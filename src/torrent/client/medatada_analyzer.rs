@@ -25,11 +25,7 @@ pub enum MetadataError {
 
 impl fmt::Display for MetadataError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Error de lectura del archivo .torrent.\n Backtrace: {:?}\n",
-            self
-        )
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 

@@ -13,6 +13,7 @@ use std::{
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 type ResultResponse<T> = Result<T, ResponseError>;
 
+const ZERO: u64 = 0;
 const INTERVAL: &str = "interval";
 const COMPLETE: &str = "complete";
 const INCOMPLETE: &str = "incomplete";
@@ -72,12 +73,9 @@ pub fn decode_compact_peer(compact_peer: Vec<u8>) -> ResultResponse<(IpAddr, u16
 }
 
 impl PeerDataFromTrackerResponse {
-    pub fn new(id: Vec<u8>, ip: String, port: u16) -> ResultResponse<Self> {
-        let mut peer_id = None;
+    pub fn new(id: Option<Vec<u8>>, ip: String, port: u16) -> ResultResponse<Self> {
+        let peer_id = id;
         let peer_address = to_sock_addr(ip, port)?;
-        if !id.is_empty() {
-            peer_id = Some(id);
-        }
 
         Ok(PeerDataFromTrackerResponse {
             peer_id,
@@ -135,7 +133,11 @@ fn init_peers(dic_response: &DicValues) -> ResultResponse<Vec<PeerDataFromTracke
                         let ip = get_dic_string(dic_peer, IP, Section::Ip)?;
                         let ip = vec_u8_to_string(&ip);
                         let port = get_dic_u64(dic_peer, PORT, Section::Port)?;
-                        let peer_id = get_dic_string(dic_peer, PEER_ID, Section::PeerId)?;
+                        let peer_id = match get_dic_string(dic_peer, PEER_ID, Section::PeerId) {
+                            Ok(id) => Some(id),
+                            Err(ResponseError::NotFound(_)) => None,
+                            Err(error) => return Err(error),
+                        };
                         let peer_struct =
                             PeerDataFromTrackerResponse::new(peer_id, ip, port as u16)?;
                         vector_peers.push(peer_struct);
@@ -167,8 +169,17 @@ fn init_peers(dic_response: &DicValues) -> ResultResponse<Vec<PeerDataFromTracke
 impl TrackerResponseData {
     pub fn new(dic_response: DicValues) -> Result<Self, ResponseError> {
         let interval = get_dic_u64(&dic_response, INTERVAL, Section::Interval)?;
-        let complete = get_dic_u64(&dic_response, COMPLETE, Section::Complete)?;
-        let incomplete = get_dic_u64(&dic_response, INCOMPLETE, Section::Incomplete)?;
+
+        let complete = match get_dic_u64(&dic_response, COMPLETE, Section::Complete) {
+            Ok(value_complete) => value_complete,
+            Err(ResponseError::NotFound(_)) => ZERO,
+            Err(error) => return Err(error),
+        };
+        let incomplete = match get_dic_u64(&dic_response, INCOMPLETE, Section::Incomplete) {
+            Ok(value_incomplete) => value_incomplete,
+            Err(ResponseError::NotFound(_)) => ZERO,
+            Err(error) => return Err(error),
+        };
         let peers = init_peers(&dic_response)?;
 
         Ok(TrackerResponseData {

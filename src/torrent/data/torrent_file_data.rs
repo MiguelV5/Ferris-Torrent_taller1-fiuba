@@ -81,7 +81,7 @@ pub struct TorrentFileData {
 
 impl fmt::Display for TorrentFileDataError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error de TorrentFileData.\n Backtrace: {:?}\n", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 

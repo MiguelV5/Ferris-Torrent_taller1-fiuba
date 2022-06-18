@@ -1,8 +1,11 @@
 use core::fmt;
 use fa_torrent::torrent::{
-    client::peers_comunication::msg_receiver,
+    client::peers_comunication::{
+        handler::{InteractionHandlerError, BLOCK_BYTES},
+        //InteractionHandlerStatus
+        msg_receiver,
+    },
     data::{
-        //peer_data_for_communication::PeerDataForP2PCommunication,
         torrent_file_data::{TargetFilesData, TorrentFileData},
         torrent_status::{StateOfDownload, TorrentStatus},
         tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
@@ -16,20 +19,22 @@ use fa_torrent::torrent::{
 };
 use std::{
     error::Error,
-    //fs,
+    fs,
     io::{ErrorKind, Write},
-    net::{SocketAddr, TcpListener /*TcpStream*/},
+    net::{SocketAddr, TcpListener},
     str::FromStr,
     sync::mpsc,
     thread,
 };
 
 const LOCALHOST: &str = "127.0.0.1";
+pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
 const STARTING_PORT: u16 = 8080;
-const MAX_TESTING_PORT: u16 = 9080;
+const MAX_PORT: u16 = 9080;
 
 pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
 pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
+pub const DEFAULT_SERVER_PEER_ID2: &str = "-FA0001-000000000002";
 pub const DEFAULT_TRACKER_ID: &str = "Tracker ID";
 pub const DEFAULT_URL_TRACKER_MAIN: &str = "url_tracker_main.com";
 pub const DEFAULT_FILE_NAME: &str = "file_name.txt";
@@ -45,15 +50,19 @@ pub enum TestingError {
 
 impl fmt::Display for TestingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 
 impl Error for TestingError {}
 
-//==========================================
+//=============================================================================================
 // FUNCIONES AUXILIARES:
 //
+
+//=================================================
+// RELACIONADAS A CREACION DE DATOS POR DEFECTO:
+
 fn create_default_torrent_data(
     torrent_name: &str,
     peer_address: SocketAddr,
@@ -96,6 +105,107 @@ fn create_default_torrent_data(
     Ok((tracker_response_data, torrent_status, torrent_file))
 }
 
+fn create_default_client_peer_with_two_server_peers_that_have_the_whole_file(
+    torrent_name: &str,
+    peer_address1: SocketAddr,
+    peer_address2: SocketAddr,
+) -> Result<(TrackerResponseData, TorrentStatus, TorrentFileData), Box<dyn Error>> {
+    let server_peer = PeerDataFromTrackerResponse {
+        peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
+        peer_address: peer_address1.clone(),
+    };
+    let server_peer2 = PeerDataFromTrackerResponse {
+        peer_id: Some(DEFAULT_SERVER_PEER_ID2.bytes().collect()),
+        peer_address: peer_address2.clone(),
+    };
+    let tracker_response = TrackerResponseData {
+        interval: 0,
+        complete: 2,
+        incomplete: 0,
+        peers: vec![server_peer, server_peer2],
+    };
+    let torrent_status = TorrentStatus {
+        uploaded: 0,
+        downloaded: 0,
+        left: 40000,
+        event: StateOfDownload::Started,
+        pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
+    };
+    let torrent_file = TorrentFileData {
+        target_files_data: TargetFilesData::SingleFile {
+            file_name: torrent_name.to_string(),
+            file_length: 40000,
+            //1º pieza -> 34000 bytes
+            //2º pieza ->  6000 bytes
+        },
+
+        sha1_pieces: vec![
+            202, 159, 46, 61, 51, 96, 133, 196, 50, 186, 241, 152, 214, 63, 131, 198, 120, 150, 83,
+            35, 95, 100, 198, 139, 237, 56, 161, 225, 113, 168, 52, 228, 26, 36, 103, 150, 103, 76,
+            233, 34,
+        ],
+        url_tracker_main: "tracker_main.com".to_string(),
+        url_tracker_list: vec![],
+        sha1_info_hash: DEFAULT_INFO_HASH.to_vec(),
+        piece_length: 34000,
+        total_amount_of_pieces: 2,
+        total_length: 40000,
+    };
+    Ok((tracker_response, torrent_status, torrent_file))
+}
+
+fn create_default_client_peer_with_a_server_peer_that_has_the_whole_file(
+    torrent_name: &str,
+    peer_address: SocketAddr,
+) -> Result<(TrackerResponseData, TorrentStatus, TorrentFileData), Box<dyn Error>> {
+    let server_peer = PeerDataFromTrackerResponse {
+        peer_id: Some(DEFAULT_SERVER_PEER_ID.bytes().collect()),
+        peer_address: peer_address.clone(),
+    };
+    let tracker_response = TrackerResponseData {
+        interval: 0,
+        complete: 1,
+        incomplete: 0,
+        peers: vec![server_peer],
+    };
+    let torrent_status = TorrentStatus {
+        uploaded: 0,
+        downloaded: 0,
+        left: 40000,
+        event: StateOfDownload::Started,
+        pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
+    };
+    let torrent_file = TorrentFileData {
+        target_files_data: TargetFilesData::SingleFile {
+            file_name: torrent_name.to_string(),
+            file_length: 40000,
+            //1º pieza -> 34000 bytes
+            //2º pieza ->  6000 bytes
+        },
+        // sha1_pieces: vec![
+        //     46, 101, 88, 42, 242, 153, 87, 30, 42, 117, 240, 135, 191, 37, 12, 42, 175, 156, 136,
+        //     214, 95, 100, 198, 139, 237, 56, 161, 225, 113, 168, 52, 228, 26, 36, 103, 150, 103,
+        //     76, 233, 34,
+        // ], MIGUEL: De donde sale este sha1 de la 1ra pieza? porque me estaba fallando a la hora de testear la pieza completa. El sha1 correspondiente que me dio es:
+        //"ca9f2e3d336085c432baf198d63f83c678965323":
+        sha1_pieces: vec![
+            202, 159, 46, 61, 51, 96, 133, 196, 50, 186, 241, 152, 214, 63, 131, 198, 120, 150, 83,
+            35, 95, 100, 198, 139, 237, 56, 161, 225, 113, 168, 52, 228, 26, 36, 103, 150, 103, 76,
+            233, 34,
+        ], //Ojo que a partir del 96 de la segunda linea (96 inclusive) es el sha1 de la 2da pieza. Creo que esa estaba bien de antes
+        url_tracker_main: "tracker_main.com".to_string(),
+        url_tracker_list: vec![],
+        sha1_info_hash: DEFAULT_INFO_HASH.to_vec(),
+        piece_length: 34000,
+        total_amount_of_pieces: 2,
+        total_length: 40000,
+    };
+    Ok((tracker_response, torrent_status, torrent_file))
+}
+
+//=================================================
+// RELACIONADAS A BIND PARA CONEXIONES:
+
 #[derive(PartialEq, Debug)]
 enum PortBindingError {
     ReachedMaxPortWithoutFindingAnAvailableOne,
@@ -103,7 +213,7 @@ enum PortBindingError {
 
 impl fmt::Display for PortBindingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 
@@ -111,7 +221,7 @@ impl Error for PortBindingError {}
 
 fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
     let mut new_port: u16 = current_port;
-    if current_port >= MAX_TESTING_PORT {
+    if current_port >= MAX_PORT {
         Err(PortBindingError::ReachedMaxPortWithoutFindingAnAvailableOne)
     } else {
         new_port += 1;
@@ -141,29 +251,13 @@ pub fn try_bind_listener(first_port: u16) -> Result<(TcpListener, String), Box<d
     ))
 }
 
-//==========================================
+//=================================================
 
-//
-// TESTS:
-//
-#[test]
-fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
-    // ABRO LA CONEXION
-    let (listener, address) = try_bind_listener(STARTING_PORT)?;
+// MOCKS DE PEERS SERVERS:
 
-    // CREACION DE UN CLIENTE PEER
-    let (tracker_response_data, torrent_status, torrent_file_data) =
-        create_default_torrent_data("test_handshake_ok.txt", SocketAddr::from_str(&address)?)?;
-
-    //THREAD SECUNDARIO PARA EL CLIENTE
-    let (tx, rx) = mpsc::channel();
-    let handle = thread::spawn(move || {
-        //HANDLEO COMUNICACION
-        let local_peer =
-            LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0).unwrap();
-        tx.send((local_peer, torrent_status))
-    });
-
+fn server_peer_interaction_mock_for_handshake(
+    listener: TcpListener,
+) -> Result<P2PMessage, Box<dyn Error>> {
     //SERVER PEER RECIBE UN HANDSHAKE
     let (mut server_stream, _addr) = listener.accept()?;
     let received_handshake = msg_receiver::receive_handshake(&mut server_stream)?;
@@ -187,17 +281,511 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
     };
     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
     server_stream.write_all(&server_msg_bytes)?;
+    Ok(received_handshake)
+}
+
+fn server_peer_interaction_mock_for_receiving_one_block(
+    listener: TcpListener,
+) -> Result<(), Box<dyn Error>> {
+    let (mut server_stream, _addr) = listener.accept()?;
+
+    //SERVER PEER RECIBE UN HANDSHAKE
+    let received_message = msg_receiver::receive_handshake(&mut server_stream)?;
+    let expected_protocol_str_and_info_hash = (
+        PSTR_STRING_HANDSHAKE.to_string(),
+        DEFAULT_INFO_HASH.to_vec(),
+    );
+    if let P2PMessage::Handshake {
+        protocol_str,
+        info_hash,
+        peer_id: _,
+    } = received_message
+    {
+        assert_eq!(
+            expected_protocol_str_and_info_hash,
+            (protocol_str, info_hash)
+        );
+    };
+
+    //SERVER PEER ENVIA UN HANDSHAKE DE RESPUESTA
+    let server_handshake = P2PMessage::Handshake {
+        protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+        info_hash: DEFAULT_INFO_HASH.to_vec(),
+        peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
+    };
+    let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
+    server_stream.write_all(&server_handshake_bytes)?;
+
+    //SERVER PEER ENVIA UN BITFIELD
+    let server_msg = P2PMessage::Bitfield {
+        bitfield: vec![
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece,
+        ],
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER RECIVE UN INTERESTED
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(P2PMessage::Interested, received_message);
+
+    //SERVER PEER ENVIA UN UNCHOKE
+    let server_msg = P2PMessage::Unchoke;
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER RECIBE UN REQUEST
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(
+        P2PMessage::Request {
+            piece_index: 0,
+            beginning_byte_index: 0,
+            amount_of_bytes: BLOCK_BYTES.try_into()?
+        },
+        received_message
+    );
+
+    //SERVER PEER ENVIA UN BLOQUE QUE CORRESPONDE A LA PIEZA ENTERA
+    let server_msg = P2PMessage::Piece {
+        piece_index: 0,
+        beginning_byte_index: 0,
+        block: [10; BLOCK_BYTES as usize].to_vec(),
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER ENVIA UN MENSAJE INVALIDO PARA CORTAR CONEXION ANTES DE TIEMPO
+    let server_msg = P2PMessage::Bitfield {
+        bitfield: vec![
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece,
+        ],
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+    Ok(())
+}
+
+// fn server_peer_interaction_mock_for_receiving_an_entire_piece(
+//     listener: TcpListener,
+// ) -> Result<(), Box<dyn Error>> {
+//     let (mut server_stream, _addr) = listener.accept()?;
+
+//     //SERVER PEER RECIBE UN HANDSHAKE
+//     let received_message = msg_receiver::receive_handshake(&mut server_stream)?;
+//     let expected_protocol_str_and_info_hash = (
+//         PSTR_STRING_HANDSHAKE.to_string(),
+//         DEFAULT_INFO_HASH.to_vec(),
+//     );
+//     if let P2PMessage::Handshake {
+//         protocol_str,
+//         info_hash,
+//         peer_id: _,
+//     } = received_message
+//     {
+//         assert_eq!(
+//             expected_protocol_str_and_info_hash,
+//             (protocol_str, info_hash)
+//         );
+//     };
+
+//     //SERVER PEER ENVIA UN HANDSHAKE DE RESPUESTA
+//     let server_handshake = P2PMessage::Handshake {
+//         protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+//         info_hash: DEFAULT_INFO_HASH.to_vec(),
+//         peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
+//     };
+//     let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
+//     server_stream.write_all(&server_handshake_bytes)?;
+
+//     //SERVER PEER ENVIA UN BITFIELD
+//     let server_msg = P2PMessage::Bitfield {
+//         bitfield: vec![
+//             PieceStatus::ValidAndAvailablePiece,
+//             PieceStatus::ValidAndAvailablePiece,
+//         ],
+//     };
+//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+//     server_stream.write_all(&server_msg_bytes)?;
+
+//     //SERVER PEER RECIVE UN INTERESTED
+//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
+//     assert_eq!(P2PMessage::Interested, received_message);
+
+//     //SERVER PEER ENVIA UN UNCHOKE
+//     let server_msg = P2PMessage::Unchoke;
+//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+//     server_stream.write_all(&server_msg_bytes)?;
+
+//     //SERVER PEER RECIBE UN REQUEST
+//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
+//     assert_eq!(
+//         P2PMessage::Request {
+//             piece_index: 0,
+//             beginning_byte_index: 0,
+//             amount_of_bytes: BLOCK_BYTES.try_into()?
+//         },
+//         received_message
+//     );
+
+//     //SERVER PEER ENVIA UN BLOQUE
+//     let server_msg = P2PMessage::Piece {
+//         piece_index: 0,
+//         beginning_byte_index: 0,
+//         block: [10; BLOCK_BYTES as usize].to_vec(),
+//     };
+//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+//     server_stream.write_all(&server_msg_bytes)?;
+
+//     //SERVER PEER RECIBE UN REQUEST
+//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
+//     assert_eq!(
+//         P2PMessage::Request {
+//             piece_index: 0,
+//             beginning_byte_index: BLOCK_BYTES,
+//             amount_of_bytes: BLOCK_BYTES.try_into()?
+//         },
+//         received_message
+//     );
+
+//     //SERVER PEER ENVIA UN BLOQUE
+//     let server_msg = P2PMessage::Piece {
+//         piece_index: 0,
+//         beginning_byte_index: BLOCK_BYTES,
+//         block: [10; BLOCK_BYTES as usize].to_vec(),
+//     };
+//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+//     server_stream.write_all(&server_msg_bytes)?;
+
+//     //SERVER PEER RECIBE UN REQUEST
+//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
+//     assert_eq!(
+//         P2PMessage::Request {
+//             piece_index: 0,
+//             beginning_byte_index: BLOCK_BYTES * 2,
+//             amount_of_bytes: (u32::try_from(DEFAULT_PIECE_LENGHT)?
+//                 - 2 * u32::try_from(BLOCK_BYTES)?)
+//         },
+//         received_message
+//     );
+
+//     //SERVER PEER ENVIA UN CHOKE
+//     let server_msg = P2PMessage::Choke;
+//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+//     server_stream.write_all(&server_msg_bytes)?;
+
+//     //SERVER PEER RECIVE UN INTERESTED
+//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
+//     assert_eq!(P2PMessage::Interested, received_message);
+
+//     //SERVER PEER ENVIA UN UNCHOKE
+//     let server_msg = P2PMessage::Unchoke;
+//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+//     server_stream.write_all(&server_msg_bytes)?;
+
+//     //SERVER PEER ENVIA UN BLOQUE
+//     let server_msg = P2PMessage::Piece {
+//         piece_index: 0,
+//         beginning_byte_index: BLOCK_BYTES * 2,
+//         block: [10; DEFAULT_PIECE_LENGHT - 2 * BLOCK_BYTES as usize].to_vec(),
+//     };
+//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+//     server_stream.write_all(&server_msg_bytes)?;
+
+//     //SERVER PEER ENVIA UN MENSAJE INVALIDO PARA CORTAR CONEXION ANTES DE TIEMPO
+//     let server_msg = P2PMessage::Bitfield {
+//         bitfield: vec![
+//             PieceStatus::ValidAndAvailablePiece,
+//             PieceStatus::ValidAndAvailablePiece,
+//             PieceStatus::ValidAndAvailablePiece,
+//         ],
+//     };
+//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+//     server_stream.write_all(&server_msg_bytes)?;
+//     Ok(())
+// }
+
+fn server_peer_interaction_mock_for_receiving_an_entire_piece_with_shutdown(
+    listener: TcpListener,
+) -> Result<(), Box<dyn Error>> {
+    // (SE MANTIENEN ABIERTAS LAS CONEXIONES DE LOS SERVER PEERS)
+    let (mut server_stream_prone_to_shut, _addr_prone_to_shut) = listener.accept()?;
+
+    //SERVER PEER propenso a hacer shutdown RECIBE UN HANDSHAKE
+    let received_message = msg_receiver::receive_handshake(&mut server_stream_prone_to_shut)?;
+    let expected_protocol_str_and_info_hash = (
+        PSTR_STRING_HANDSHAKE.to_string(),
+        DEFAULT_INFO_HASH.to_vec(),
+    );
+    if let P2PMessage::Handshake {
+        protocol_str,
+        info_hash,
+        peer_id: _,
+    } = received_message
+    {
+        assert_eq!(
+            expected_protocol_str_and_info_hash,
+            (protocol_str, info_hash)
+        );
+    };
+
+    //SERVER PEER propenso a hacer shutdown ENVIA UN HANDSHAKE DE RESPUESTA
+    let server_handshake = P2PMessage::Handshake {
+        protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+        info_hash: DEFAULT_INFO_HASH.to_vec(),
+        peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
+    };
+    let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
+    server_stream_prone_to_shut.write_all(&server_handshake_bytes)?;
+
+    //SERVER PEER propenso a hacer shutdown ENVIA UN BITFIELD
+    let server_msg = P2PMessage::Bitfield {
+        bitfield: vec![
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece,
+        ],
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream_prone_to_shut.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER propenso a hacer shutdown RECIVE UN INTERESTED
+    let received_message = msg_receiver::receive_message(&mut server_stream_prone_to_shut)?;
+    assert_eq!(P2PMessage::Interested, received_message);
+
+    //SERVER PEER propenso a hacer shutdown ENVIA UN UNCHOKE
+    let server_msg = P2PMessage::Unchoke;
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream_prone_to_shut.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER propenso a hacer shutdown RECIBE UN REQUEST
+    let received_message = msg_receiver::receive_message(&mut server_stream_prone_to_shut)?;
+    assert_eq!(
+        P2PMessage::Request {
+            piece_index: 0,
+            beginning_byte_index: 0,
+            amount_of_bytes: BLOCK_BYTES.try_into()?
+        },
+        received_message
+    );
+
+    //SERVER PEER propenso a hacer shutdown ENVIA UN BLOQUE
+    let server_msg = P2PMessage::Piece {
+        piece_index: 0,
+        beginning_byte_index: 0,
+        block: [10; BLOCK_BYTES as usize].to_vec(),
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream_prone_to_shut.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER propenso a hacer shutdown RECIBE UN REQUEST
+    let received_message = msg_receiver::receive_message(&mut server_stream_prone_to_shut)?;
+    assert_eq!(
+        P2PMessage::Request {
+            piece_index: 0,
+            beginning_byte_index: BLOCK_BYTES,
+            amount_of_bytes: BLOCK_BYTES.try_into()?
+        },
+        received_message
+    );
+
+    //SERVER PEER propenso a hacer shutdown CORTA LA CONEXION DE MANERA INESPERADA
+    server_stream_prone_to_shut.shutdown(std::net::Shutdown::Both)?;
+    Ok(())
+}
+
+fn server_peer_interaction_mock_for_receiving_an_entire_piece_without_shutdown(
+    listener: TcpListener,
+) -> Result<(), Box<dyn Error>> {
+    let (mut server_stream, _addr) = listener.accept()?;
+
+    //SERVER PEER RECIBE UN HANDSHAKE
+    let received_message = msg_receiver::receive_handshake(&mut server_stream)?;
+    let expected_protocol_str_and_info_hash = (
+        PSTR_STRING_HANDSHAKE.to_string(),
+        DEFAULT_INFO_HASH.to_vec(),
+    );
+    if let P2PMessage::Handshake {
+        protocol_str,
+        info_hash,
+        peer_id: _,
+    } = received_message
+    {
+        assert_eq!(
+            expected_protocol_str_and_info_hash,
+            (protocol_str, info_hash)
+        );
+    };
+
+    //SERVER PEER ENVIA UN HANDSHAKE DE RESPUESTA
+    let server_handshake = P2PMessage::Handshake {
+        protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
+        info_hash: DEFAULT_INFO_HASH.to_vec(),
+        peer_id: DEFAULT_SERVER_PEER_ID2.bytes().collect(),
+    };
+    let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
+    server_stream.write_all(&server_handshake_bytes)?;
+
+    //SERVER PEER ENVIA UN BITFIELD
+    let server_msg = P2PMessage::Bitfield {
+        bitfield: vec![
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece,
+        ],
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER RECIVE UN INTERESTED
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(P2PMessage::Interested, received_message);
+
+    //SERVER PEER ENVIA UN UNCHOKE
+    let server_msg = P2PMessage::Unchoke;
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER RECIBE UN REQUEST
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(
+        P2PMessage::Request {
+            piece_index: 0,
+            beginning_byte_index: 0,
+            amount_of_bytes: BLOCK_BYTES.try_into()?
+        },
+        received_message
+    );
+
+    //SERVER PEER ENVIA UN BLOQUE
+    let server_msg = P2PMessage::Piece {
+        piece_index: 0,
+        beginning_byte_index: 0,
+        block: [10; BLOCK_BYTES as usize].to_vec(),
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER RECIBE UN REQUEST
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(
+        P2PMessage::Request {
+            piece_index: 0,
+            beginning_byte_index: BLOCK_BYTES,
+            amount_of_bytes: BLOCK_BYTES.try_into()?
+        },
+        received_message
+    );
+
+    //SERVER PEER ENVIA UN BLOQUE
+    let server_msg = P2PMessage::Piece {
+        piece_index: 0,
+        beginning_byte_index: BLOCK_BYTES,
+        block: [10; BLOCK_BYTES as usize].to_vec(),
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER RECIBE UN REQUEST
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(
+        P2PMessage::Request {
+            piece_index: 0,
+            beginning_byte_index: BLOCK_BYTES * 2,
+            amount_of_bytes: (u32::try_from(DEFAULT_PIECE_LENGHT)?
+                - 2 * u32::try_from(BLOCK_BYTES)?)
+        },
+        received_message
+    );
+
+    //SERVER PEER ENVIA UN CHOKE
+    let server_msg = P2PMessage::Choke;
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER RECIBE UN INTERESTED
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(P2PMessage::Interested, received_message);
+
+    //SERVER PEER ENVIA UN UNCHOKE
+    let server_msg = P2PMessage::Unchoke;
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER RECIBE UN REQUEST
+    let received_message = msg_receiver::receive_message(&mut server_stream)?;
+    assert_eq!(
+        P2PMessage::Request {
+            piece_index: 0,
+            beginning_byte_index: BLOCK_BYTES * 2,
+            amount_of_bytes: (u32::try_from(DEFAULT_PIECE_LENGHT)?
+                - 2 * u32::try_from(BLOCK_BYTES)?)
+        },
+        received_message
+    );
+
+    //SERVER PEER ENVIA UN BLOQUE
+    let server_msg = P2PMessage::Piece {
+        piece_index: 0,
+        beginning_byte_index: BLOCK_BYTES * 2,
+        block: [10; DEFAULT_PIECE_LENGHT - 2 * BLOCK_BYTES as usize].to_vec(),
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+
+    //SERVER PEER ENVIA UN MENSAJE INVALIDO PARA CORTAR CONEXION ANTES DE TIEMPO
+    let server_msg = P2PMessage::Bitfield {
+        bitfield: vec![
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece,
+        ],
+    };
+    let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
+    server_stream.write_all(&server_msg_bytes)?;
+    Ok(())
+}
+//=================================================
+//=============================================================================================
+
+//
+// TESTS:
+//
+
+#[test]
+fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
+    // CREO EL LISTENER PARA EL SERVER
+    let (listener, address) = try_bind_listener(STARTING_PORT)?;
+
+    // CREO INFO NECESARIA PARA INICIAR COMUNICACION
+    let (tracker_response_data, _torrent_status, torrent_file_data) =
+        create_default_torrent_data("test_handshake_ok.txt", SocketAddr::from_str(&address)?)?;
+
+    // Channel para obtener el handshake obtenido del lado del server:
+    let (tx, rx) = mpsc::channel();
+
+    //THREAD SECUNDARIO PARA EL SERVER
+    let handle = thread::spawn(move || {
+        let handshake_received_by_server_peer =
+            server_peer_interaction_mock_for_handshake(listener);
+        if let Ok(handshake) = handshake_received_by_server_peer {
+            let _sent = tx.send(handshake);
+        }
+    });
+
+    //INICIO LA COMUNICACION DEL LADO DEL CLIENTE
+    let local_peer = LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0)?;
+    // Obtengo el handshake que le habia llegado al server mock
+    let handshake_received_by_server_peer = rx.recv()?;
 
     //VERIFICACIONES
-    let (local_peer, _torrent_status) = rx.recv()?;
-
     assert_eq!(
         P2PMessage::Handshake {
             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
             info_hash: DEFAULT_INFO_HASH.to_vec(),
             peer_id: local_peer.get_peer_id(),
         },
-        received_handshake
+        handshake_received_by_server_peer
     );
     let expected_id: Vec<u8> = DEFAULT_SERVER_PEER_ID.bytes().collect();
     assert_eq!(expected_id, local_peer.external_peer_data.peer_id);
@@ -210,309 +798,106 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// #[test]
-// fn client_peer_interact_with_a_peer_and_receives_one_block_ok() -> Result<(), Box<dyn Error>> {
-//     //ABRO LA CONEXION
-//     let (listener, address) = try_bind_listener(STARTING_PORT)?;
-//     //CREACION DE UN CLIENTE PEER
-//     let (tracker_response_data, mut torrent_status, torrent_file_data, mut local_peer) =
-//         create_default_client_peer_with_a_server_peer_that_has_the_whole_file(
-//             "test_one_block_ok.txt",
-//             SocketAddr::from_str(&address)?,
-//         )?;
-//     let path = torrent_file_data.generate_torrent_representative_name();
-//     fs::create_dir(format!("temp/{}", path))?;
+#[test]
+fn client_peer_interact_with_a_peer_and_receives_one_block_ok() -> Result<(), Box<dyn Error>> {
+    //ABRO LA CONEXION
+    let (listener, address) = try_bind_listener(STARTING_PORT)?;
 
-//     //THREAD SECUNDARIO PARA EL CLIENTE
-//     let (tx, rx) = mpsc::channel();
-//     let handle = thread::spawn(move || {
-//         //HANDLEO COMUNICACION
-//         let result = msg_logic_control::interact_with_single_peer(
-//             &mut local_peer,
-//             0,
-//             &torrent_file_data,
-//             &tracker_response_data,
-//             &mut torrent_status,
-//         );
-//         tx.send((local_peer, torrent_status, result))
-//     });
+    // CREO INFO NECESARIA PARA INICIAR COMUNICACION
+    let (tracker_response_data, mut torrent_status, torrent_file_data) =
+        create_default_client_peer_with_a_server_peer_that_has_the_whole_file(
+            "test_one_block_ok.txt",
+            SocketAddr::from_str(&address)?,
+        )?;
+    let path = torrent_file_data.get_torrent_representative_name();
+    let _dir_creation = fs::create_dir(format!("temp/{}", path));
 
-//     let (mut server_stream, _addr) = listener.accept()?;
+    //THREAD SECUNDARIO PARA EL SERVER
+    let handle = thread::spawn(move || {
+        let _result = server_peer_interaction_mock_for_receiving_one_block(listener);
+    });
 
-//     //SERVER PEER RECIBE UN HANDSHAKE
-//     let received_message = msg_receiver::receive_handshake(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Handshake {
-//             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//             info_hash: DEFAULT_INFO_HASH.to_vec(),
-//             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
-//         },
-//         received_message
-//     );
+    let mut client_peer =
+        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0)?;
 
-//     //SERVER PEER ENVIA UN HANDSHAKE DE RESPUESTA
-//     let server_handshake = P2PMessage::Handshake {
-//         protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//         info_hash: DEFAULT_INFO_HASH.to_vec(),
-//         peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
-//     };
-//     let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
-//     server_stream.write_all(&server_handshake_bytes)?;
+    let interaction_result =
+        client_peer.interact_with_peer(&torrent_file_data, &mut torrent_status);
 
-//     //SERVER PEER ENVIA UN BITFIELD
-//     let server_msg = P2PMessage::Bitfield {
-//         bitfield: vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//         ],
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
+    //VEO QUE LE HAYA LLEGADO Y QUE ADEMAS LO ACEPTE
+    assert_eq!(
+        Err(InteractionHandlerError::UpdatingBitfield(
+            "\n    CheckingBitfield(\n    \"[TorrentFileDataError] Some of the spare bits are set.\",\n)\n"
+                .to_string()
+        )),
+        interaction_result
+    );
 
-//     //SERVER PEER RECIVE UN INTERESTED
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(P2PMessage::Interested, received_message);
+    let expected_id: Vec<u8> = DEFAULT_SERVER_PEER_ID.bytes().collect();
+    assert_eq!(expected_id, client_peer.external_peer_data.peer_id);
+    assert_eq!(true, client_peer.external_peer_data.am_choking);
+    assert_eq!(false, client_peer.external_peer_data.peer_choking);
+    assert_eq!(true, client_peer.external_peer_data.am_interested);
 
-//     //SERVER PEER ENVIA UN UNCHOKE
-//     let server_msg = P2PMessage::Unchoke;
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
+    assert_eq!(
+        vec![
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece
+        ],
+        client_peer.external_peer_data.pieces_availability
+    );
 
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: 0,
-//             amount_of_bytes: BLOCK_BYTES.try_into()?
-//         },
-//         received_message
-//     );
+    assert_eq!(0, torrent_status.uploaded);
+    assert_eq!(u64::from(BLOCK_BYTES), torrent_status.downloaded);
+    assert_eq!(
+        u64::try_from(DEFAULT_PIECE_LENGHT + DEFAULT_LAST_PIECE_LENGHT)? - u64::from(BLOCK_BYTES),
+        torrent_status.left
+    );
+    assert_eq!(
+        vec![
+            PieceStatus::PartiallyDownloaded {
+                downloaded_bytes: BLOCK_BYTES
+            },
+            PieceStatus::MissingPiece
+        ],
+        torrent_status.pieces_availability
+    );
 
-//     //SERVER PEER ENVIA UN BLOQUE QUE CORRESPONDE A LA PIEZA ENTERA
-//     let server_msg = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: 0,
-//         block: [10; BLOCK_BYTES as usize].to_vec(),
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
+    let _joined = handle.join();
+    let _result_of_removing = fs::remove_dir_all(format!("temp/{}", path));
 
-//     //SERVER PEER ENVIA UN MENSAJE INVALIDO PARA CORTAR CONEXION ANTES DE TIEMPO
-//     let server_msg = P2PMessage::Bitfield {
-//         bitfield: vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//         ],
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //VEO QUE LE HAYA LLEGADO Y QUE ADEMAS LO ACEPTE
-//     let (client_peer, torrent_status, result) = rx.recv()?;
-//     assert_eq!(
-//         Err(MsgLogicControlError::UpdatingBitfield(
-//             "CheckingBitfield(\"[TorrentFileDataError] Some of the spare bits are set.\")"
-//                 .to_string()
-//         )),
-//         result
-//     );
-
-//     let expected_id: Vec<u8> = DEFAULT_SERVER_PEER_ID.bytes().collect();
-//     assert_eq!(expected_id, client_peer.external_peer_data.peer_id);
-//     assert_eq!(true, client_peer.external_peer_data.am_choking);
-//     assert_eq!(false, client_peer.external_peer_data.peer_choking);
-//     assert_eq!(true, client_peer.external_peer_data.am_interested);
-
-//     assert_eq!(
-//         vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece
-//         ],
-//         client_peer.external_peer_data.pieces_availability
-//     );
-
-//     assert_eq!(0, torrent_status.uploaded);
-//     assert_eq!(u64::from(BLOCK_BYTES), torrent_status.downloaded);
-//     assert_eq!(
-//         u64::try_from(DEFAULT_PIECE_LENGHT + DEFAULT_LAST_PIECE_LENGHT)? - u64::from(BLOCK_BYTES),
-//         torrent_status.left
-//     );
-//     assert_eq!(
-//         vec![
-//             PieceStatus::PartiallyDownloaded {
-//                 downloaded_bytes: BLOCK_BYTES
-//             },
-//             PieceStatus::MissingPiece
-//         ],
-//         torrent_status.pieces_availability
-//     );
-
-//     let _joined = handle.join();
-//     let _result_of_removing = fs::remove_dir_all(format!("temp/{}", path));
-
-//     Ok(())
-// }
+    Ok(())
+}
 
 // #[test]
 // fn client_peer_interact_with_a_peer_and_completes_a_piece_ok() -> Result<(), Box<dyn Error>> {
-//     // ABRO LA CONEXION
+//     //ABRO LA CONEXION
 //     let (listener, address) = try_bind_listener(STARTING_PORT)?;
 
-//     // CREACION DE UN CLIENTE PEER
-//     let (tracker_response_data, mut torrent_status, torrent_file_data, mut local_peer) =
+//     // CREO INFO NECESARIA PARA INICIAR COMUNICACION
+//     let (tracker_response_data, mut torrent_status, torrent_file_data) =
 //         create_default_client_peer_with_a_server_peer_that_has_the_whole_file(
 //             "test_complete_piece_ok.txt",
 //             SocketAddr::from_str(&address)?,
 //         )?;
-//     let path = torrent_file_data.generate_torrent_representative_name();
-//     fs::create_dir(format!("temp/{}", path))?;
+//     let path = torrent_file_data.get_torrent_representative_name();
+//     let _dir_creation = fs::create_dir(format!("temp/{}", path));
 
-//     //THREAD SECUNDARIO PARA EL CLIENTE
-//     let (tx, rx) = mpsc::channel();
+//     //THREAD SECUNDARIO PARA EL SERVER
 //     let handle = thread::spawn(move || {
-//         //HANDLEO COMUNICACION
-//         let result = msg_logic_control::interact_with_single_peer(
-//             &mut local_peer,
-//             0,
-//             &torrent_file_data,
-//             &tracker_response_data,
-//             &mut torrent_status,
-//         );
-//         tx.send((local_peer, torrent_status, result))
+//         let _result = server_peer_interaction_mock_for_receiving_an_entire_piece(listener);
 //     });
 
-//     let (mut server_stream, _addr) = listener.accept()?;
+//     let mut client_peer =
+//         LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0)?;
 
-//     //SERVER PEER RECIBE UN HANDSHAKE
-//     let received_message = msg_receiver::receive_handshake(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Handshake {
-//             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//             info_hash: DEFAULT_INFO_HASH.to_vec(),
-//             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN HANDSHAKE DE RESPUESTA
-//     let server_handshake = P2PMessage::Handshake {
-//         protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//         info_hash: DEFAULT_INFO_HASH.to_vec(),
-//         peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
-//     };
-//     let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
-//     server_stream.write_all(&server_handshake_bytes)?;
-
-//     //SERVER PEER ENVIA UN BITFIELD
-//     let server_msg = P2PMessage::Bitfield {
-//         bitfield: vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//         ],
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIVE UN INTERESTED
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(P2PMessage::Interested, received_message);
-
-//     //SERVER PEER ENVIA UN UNCHOKE
-//     let server_msg = P2PMessage::Unchoke;
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: 0,
-//             amount_of_bytes: BLOCK_BYTES.try_into()?
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN BLOQUE
-//     let server_msg = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: 0,
-//         block: [10; BLOCK_BYTES as usize].to_vec(),
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: BLOCK_BYTES,
-//             amount_of_bytes: BLOCK_BYTES.try_into()?
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN BLOQUE
-//     let server_msg = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: BLOCK_BYTES,
-//         block: [10; BLOCK_BYTES as usize].to_vec(),
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: BLOCK_BYTES * 2,
-//             amount_of_bytes: (u32::try_from(DEFAULT_PIECE_LENGHT)?
-//                 - 2 * u32::try_from(BLOCK_BYTES)?)
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN CHOKE
-//     let server_msg = P2PMessage::Choke;
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIVE UN INTERESTED
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(P2PMessage::Interested, received_message);
-
-//     //SERVER PEER ENVIA UN UNCHOKE
-//     let server_msg = P2PMessage::Unchoke;
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER ENVIA UN BLOQUE
-//     let server_msg = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: BLOCK_BYTES * 2,
-//         block: [10; DEFAULT_PIECE_LENGHT - 2 * BLOCK_BYTES as usize].to_vec(),
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER ENVIA UN MENSAJE INVALIDO PARA CORTAR CONEXION ANTES DE TIEMPO
-//     let server_msg = P2PMessage::Bitfield {
-//         bitfield: vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//         ],
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
+//     let interaction_result =
+//         client_peer.interact_with_peer(&torrent_file_data, &mut torrent_status);
 
 //     //VERIFICACION
-//     let (client_peer, torrent_status, result) = rx.recv()?;
-//     assert_eq!(Ok(HandlerInteractionStatus::FinishInteraction), result);
+//     assert_eq!(
+//         Ok(InteractionHandlerStatus::FinishInteraction),
+//         interaction_result
+//     );
 
 //     let expected_id: Vec<u8> = DEFAULT_SERVER_PEER_ID.bytes().collect();
 //     assert_eq!(expected_id, client_peer.external_peer_data.peer_id);
@@ -551,302 +936,94 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
 //     Ok(())
 // }
 
-// #[test]
-// fn client_peer_interact_with_a_peer_that_shuts_down_the_connection_and_then_interacts_with_another_one_correctly_ok(
-// ) -> Result<(), Box<dyn Error>> {
-//     // ABRO LA CONEXION
-//     let (listener, address) = try_bind_listener(STARTING_PORT)?;
-//     let (listener2, address2) = try_bind_listener(STARTING_PORT)?;
+#[test]
+fn client_peer_interact_with_a_peer_that_shuts_down_the_connection_and_then_interacts_with_another_one_correctly_ok(
+) -> Result<(), Box<dyn Error>> {
+    //ABRO LA CONEXION
+    let (listener, address) = try_bind_listener(STARTING_PORT)?;
+    let (listener2, address2) = try_bind_listener(STARTING_PORT)?;
 
-//     // CREACION DE CLIENTE PEER
-//     let (tracker_response_data, mut torrent_status, torrent_file_data, mut local_peer) =
-//         create_default_client_peer_with_a_server_peer_that_has_the_whole_file(
-//             "test_complete_piece_with_shutdown_ok.txt",
-//             SocketAddr::from_str(&address)?,
-//         )?;
-//     let (tracker_response_data2, mut torrent_status2, torrent_file_data2, mut local_peer2) =
-//         create_default_client_peer_with_a_server_peer_that_has_the_whole_file(
-//             "test_complete_piece_with_shutdown_ok.txt",
-//             SocketAddr::from_str(&address2)?,
-//         )?;
+    // CREO INFO NECESARIA PARA INICIAR COMUNICACION
+    let (tracker_response_data, mut torrent_status, torrent_file_data) =
+        create_default_client_peer_with_two_server_peers_that_have_the_whole_file(
+            "test_complete_piece_with_shutdown_ok.txt",
+            SocketAddr::from_str(&address)?,
+            SocketAddr::from_str(&address2)?,
+        )?; //estan en este orden a proposito. no cambiar
 
-//     //THREAD SECUNDARIO PARA EL CLIENTE
-//     let (tx, rx) = mpsc::channel();
-//     let handle = thread::spawn(move || {
-//         //HANDLEO COMUNICACION
-//         let result = handler::handle_general_interaction_as_client(
-//             &mut local_peer,
-//             &torrent_file_data,
-//             &tracker_response_data,
-//             &mut torrent_status,
-//         );
-//         tx.send((local_peer, torrent_status, result))
-//     });
+    let path = torrent_file_data.get_torrent_representative_name();
+    let _dir_creation = fs::create_dir(format!("temp/{}", path));
 
-//     // let (tx2, _rx2) = mpsc::channel();
-//     // let handle2 = thread::spawn(move || {
-//     //     //HANDLEO COMUNICACION
-//     //     let _result2 = handler::handle_general_interaction_as_client(
-//     //         &mut local_peer2,
-//     //         &torrent_file_data2,
-//     //         &tracker_response_data2,
-//     //         &mut torrent_status2,
-//     //     );
-//     //     tx2.send((local_peer2, torrent_status2))
-//     // });
+    //THREADS SECUNDARIOS PARA LOS SERVERS
+    let handle = thread::spawn(move || {
+        let _result =
+            server_peer_interaction_mock_for_receiving_an_entire_piece_with_shutdown(listener);
+    });
+    let handle2 = thread::spawn(move || {
+        let _result =
+            server_peer_interaction_mock_for_receiving_an_entire_piece_without_shutdown(listener2);
+    });
 
-//     // (SE MANTIENEN ABIERTAS LAS CONEXIONES DE LOS SERVER PEERS)
-//     let (mut server_stream2, _addr2) = listener2.accept()?;
-//     let (mut server_stream, _addr) = listener.accept()?;
+    //INTERACTUA CLIENTE QUE CORTA CONEXION:
+    let mut client_peer =
+        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0)?;
+    let interaction_result =
+        client_peer.interact_with_peer(&torrent_file_data, &mut torrent_status);
+    assert!(interaction_result.is_err());
 
-//     //SERVER PEER 2 RECIBE UN HANDSHAKE
-//     let received_message2 = msg_receiver::receive_handshake(&mut server_stream2)?;
-//     assert_eq!(
-//         P2PMessage::Handshake {
-//             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//             info_hash: DEFAULT_INFO_HASH.to_vec(),
-//             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
-//         },
-//         received_message2
-//     );
+    //FLUSH:
+    let torrent_path = torrent_file_data.get_torrent_representative_name();
+    let _result = fs::remove_dir_all(format!("temp/{}", torrent_path))
+        .map_err(|err| InteractionHandlerError::RestartingDownload(format!("{}", err)));
+    fs::create_dir(format!("temp/{}", torrent_path))
+        .map_err(|err| InteractionHandlerError::RestartingDownload(format!("{}", err)))?;
 
-//     //SERVER PEER 2 ENVIA UN HANDSHAKE DE RESPUESTA
-//     let server_handshake2 = P2PMessage::Handshake {
-//         protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//         info_hash: DEFAULT_INFO_HASH.to_vec(),
-//         peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
-//     };
-//     let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake2)?;
-//     server_stream2.write_all(&server_handshake_bytes)?;
+    torrent_status.flush_data(torrent_file_data.total_length as u64);
 
-//     //SERVER PEER 2 ENVIA UN BITFIELD
-//     let server_msg2 = P2PMessage::Bitfield {
-//         bitfield: vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//         ],
-//     };
-//     let server_msg_bytes2 = p2p::encoder::to_bytes(server_msg2)?;
-//     server_stream2.write_all(&server_msg_bytes2)?;
+    //INTERACTUA CLIENTE QUE DEBERIA FINALIZAR LA PIEZA CORRECTAMENTE:
+    let mut client_peer =
+        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 1)?;
+    let interaction_result =
+        client_peer.interact_with_peer(&torrent_file_data, &mut torrent_status);
+    assert!(interaction_result.is_ok());
 
-//     //SERVER PEER 2 RECIVE UN INTERESTED
-//     let received_message2 = msg_receiver::receive_message(&mut server_stream2)?;
-//     assert_eq!(P2PMessage::Interested, received_message2);
+    //VERIFICACION
 
-//     //SERVER PEER 2 ENVIA UN UNCHOKE
-//     let server_msg2 = P2PMessage::Unchoke;
-//     let server_msg_bytes2 = p2p::encoder::to_bytes(server_msg2)?;
-//     server_stream2.write_all(&server_msg_bytes2)?;
+    let expected_id: Vec<u8> = DEFAULT_SERVER_PEER_ID2.bytes().collect();
+    assert_eq!(expected_id, client_peer.external_peer_data.peer_id);
+    assert_eq!(true, client_peer.external_peer_data.am_choking);
+    assert_eq!(false, client_peer.external_peer_data.peer_choking);
+    assert_eq!(true, client_peer.external_peer_data.am_interested);
 
-//     //SERVER PEER 2 RECIBE UN REQUEST
-//     let received_message2 = msg_receiver::receive_message(&mut server_stream2)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: 0,
-//             amount_of_bytes: BLOCK_BYTES.try_into()?
-//         },
-//         received_message2
-//     );
+    assert_eq!(
+        vec![
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::ValidAndAvailablePiece
+        ],
+        client_peer.external_peer_data.pieces_availability
+    );
 
-//     //SERVER PEER 2 ENVIA UN BLOQUE
-//     let server_msg2 = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: 0,
-//         block: [10; BLOCK_BYTES as usize].to_vec(),
-//     };
-//     let server_msg_bytes2 = p2p::encoder::to_bytes(server_msg2)?;
-//     server_stream2.write_all(&server_msg_bytes2)?;
+    assert_eq!(0, torrent_status.uploaded);
+    assert_eq!(
+        u64::try_from(DEFAULT_PIECE_LENGHT)?,
+        torrent_status.downloaded
+    );
+    assert_eq!(
+        u64::try_from(DEFAULT_LAST_PIECE_LENGHT)?,
+        torrent_status.left
+    );
+    assert_eq!(
+        vec![
+            PieceStatus::ValidAndAvailablePiece,
+            PieceStatus::MissingPiece
+        ],
+        torrent_status.pieces_availability
+    );
 
-//     //SERVER PEER 2 RECIBE UN REQUEST
-//     let received_message2 = msg_receiver::receive_message(&mut server_stream2)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: BLOCK_BYTES,
-//             amount_of_bytes: BLOCK_BYTES.try_into()?
-//         },
-//         received_message2
-//     );
+    let _joined = handle2.join();
+    let _joined = handle.join();
+    let _result_of_removing =
+        fs::remove_dir_all(format!("temp/test_complete_piece_with_shutdown_ok"));
 
-//     //SERVER PEER 2 CORTA LA CONEXION DE MANERA INESPERADA
-//     server_stream2.shutdown(std::net::Shutdown::Both)?;
-
-//     //SERVER PEER (1) RECIBE UN HANDSHAKE
-//     let received_message = msg_receiver::receive_handshake(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Handshake {
-//             protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//             info_hash: DEFAULT_INFO_HASH.to_vec(),
-//             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN HANDSHAKE DE RESPUESTA
-//     let server_handshake = P2PMessage::Handshake {
-//         protocol_str: PSTR_STRING_HANDSHAKE.to_string(),
-//         info_hash: DEFAULT_INFO_HASH.to_vec(),
-//         peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
-//     };
-//     let server_handshake_bytes = p2p::encoder::to_bytes(server_handshake)?;
-//     server_stream.write_all(&server_handshake_bytes)?;
-
-//     //SERVER PEER ENVIA UN BITFIELD
-//     let server_msg = P2PMessage::Bitfield {
-//         bitfield: vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//         ],
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIVE UN INTERESTED
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(P2PMessage::Interested, received_message);
-
-//     //SERVER PEER ENVIA UN UNCHOKE
-//     let server_msg = P2PMessage::Unchoke;
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: 0,
-//             amount_of_bytes: BLOCK_BYTES.try_into()?
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN BLOQUE
-//     let server_msg = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: 0,
-//         block: [10; BLOCK_BYTES as usize].to_vec(),
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: BLOCK_BYTES,
-//             amount_of_bytes: BLOCK_BYTES.try_into()?
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN BLOQUE
-//     let server_msg = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: BLOCK_BYTES,
-//         block: [10; BLOCK_BYTES as usize].to_vec(),
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: BLOCK_BYTES * 2,
-//             amount_of_bytes: (u32::try_from(DEFAULT_PIECE_LENGHT)?
-//                 - 2 * u32::try_from(BLOCK_BYTES)?)
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN CHOKE
-//     let server_msg = P2PMessage::Choke;
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIBE UN INTERESTED
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(P2PMessage::Interested, received_message);
-
-//     //SERVER PEER ENVIA UN UNCHOKE
-//     let server_msg = P2PMessage::Unchoke;
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER RECIBE UN REQUEST
-//     let received_message = msg_receiver::receive_message(&mut server_stream)?;
-//     assert_eq!(
-//         P2PMessage::Request {
-//             piece_index: 0,
-//             beginning_byte_index: BLOCK_BYTES * 2,
-//             amount_of_bytes: (u32::try_from(DEFAULT_PIECE_LENGHT)?
-//                 - 2 * u32::try_from(BLOCK_BYTES)?)
-//         },
-//         received_message
-//     );
-
-//     //SERVER PEER ENVIA UN BLOQUE
-//     let server_msg = P2PMessage::Piece {
-//         piece_index: 0,
-//         beginning_byte_index: BLOCK_BYTES * 2,
-//         block: [10; DEFAULT_PIECE_LENGHT - 2 * BLOCK_BYTES as usize].to_vec(),
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //SERVER PEER ENVIA UN MENSAJE INVALIDO PARA CORTAR CONEXION ANTES DE TIEMPO
-//     let server_msg = P2PMessage::Bitfield {
-//         bitfield: vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece,
-//         ],
-//     };
-//     let server_msg_bytes = p2p::encoder::to_bytes(server_msg)?;
-//     server_stream.write_all(&server_msg_bytes)?;
-
-//     //VERIFICACION
-//     let (client_peer, torrent_status, result) = rx.recv()?;
-//     assert_eq!(Ok(()), result);
-
-//     let expected_id: Vec<u8> = DEFAULT_SERVER_PEER_ID.bytes().collect();
-//     assert_eq!(expected_id, client_peer.external_peer_data.peer_id);
-//     assert_eq!(true, client_peer.external_peer_data.am_choking);
-//     assert_eq!(false, client_peer.external_peer_data.peer_choking);
-//     assert_eq!(true, client_peer.external_peer_data.am_interested);
-
-//     assert_eq!(
-//         vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::ValidAndAvailablePiece
-//         ],
-//         client_peer.external_peer_data.pieces_availability
-//     );
-
-//     assert_eq!(0, torrent_status.uploaded);
-//     assert_eq!(
-//         u64::try_from(DEFAULT_PIECE_LENGHT)?,
-//         torrent_status.downloaded
-//     );
-//     assert_eq!(
-//         u64::try_from(DEFAULT_LAST_PIECE_LENGHT)?,
-//         torrent_status.left
-//     );
-//     assert_eq!(
-//         vec![
-//             PieceStatus::ValidAndAvailablePiece,
-//             PieceStatus::MissingPiece
-//         ],
-//         torrent_status.pieces_availability
-//     );
-
-//     let _joined = handle.join();
-//     let _result_of_removing =
-//         fs::remove_dir_all(format!("temp/test_complete_piece_with_shutdown_ok"));
-
-//     Ok(())
-// }
+    Ok(())
+}

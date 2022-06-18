@@ -25,7 +25,7 @@ pub enum MsgSenderError {
 
 impl fmt::Display for MsgSenderError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 
@@ -45,21 +45,21 @@ pub fn send_handshake(
         info_hash: torrent_file_data.get_info_hash(),
         peer_id: peer_id.to_vec(),
     })
-    .map_err(|error| MsgSenderError::EncondingMessageIntoBytes(format!("{:?}", error)))?;
+    .map_err(|error| MsgSenderError::EncondingMessageIntoBytes(format!("{}", error)))?;
 
     stream
         .write_all(&handshake_bytes)
-        .map_err(|error| MsgSenderError::WriteToTcpStream(format!("{:?}", error)))?;
+        .map_err(|error| MsgSenderError::WriteToTcpStream(format!("{}", error)))?;
     Ok(())
 }
 
 fn send_msg(stream: &mut TcpStream, msg_variant: P2PMessage) -> Result<(), MsgSenderError> {
     let msg_bytes = p2p::encoder::to_bytes(msg_variant)
-        .map_err(|error| MsgSenderError::EncondingMessageIntoBytes(format!("{:?}", error)))?;
+        .map_err(|error| MsgSenderError::EncondingMessageIntoBytes(format!("{}", error)))?;
 
     stream
         .write_all(&msg_bytes)
-        .map_err(|error| MsgSenderError::WriteToTcpStream(format!("{:?}", error)))?;
+        .map_err(|error| MsgSenderError::WriteToTcpStream(format!("{}", error)))?;
     Ok(())
 }
 
@@ -139,13 +139,13 @@ pub fn send_request(
 ) -> Result<(), MsgSenderError> {
     let beginning_byte_index = torrent_status
         .calculate_beginning_byte_index(piece_index)
-        .map_err(|err| MsgSenderError::SendingRequest(format!("{:?}", err)))?;
+        .map_err(|err| MsgSenderError::SendingRequest(format!("{}", err)))?;
     let amount_of_bytes = torrent_status
         .calculate_amount_of_bytes_of_block(torrent_file_data, piece_index, beginning_byte_index)
-        .map_err(|err| MsgSenderError::SendingRequest(format!("{:?}", err)))?;
+        .map_err(|err| MsgSenderError::SendingRequest(format!("{}", err)))?;
     let piece_index = piece_index
         .try_into()
-        .map_err(|error| MsgSenderError::SendingRequest(format!("{:?}", error)))?;
+        .map_err(|error| MsgSenderError::SendingRequest(format!("{}", error)))?;
 
     //habria que ver si ese checkeo sigue siendo necesario
     check_request_or_cancel_fields(amount_of_bytes)?;
@@ -172,7 +172,7 @@ fn check_piece_fields(block: &[u8]) -> Result<(), MsgSenderError> {
     if block.len()
         > MAX_BLOCK_BYTES
             .try_into()
-            .map_err(|error| MsgSenderError::NumberConversion(format!("{:?}", error)))?
+            .map_err(|error| MsgSenderError::NumberConversion(format!("{}", error)))?
     {
         return Err(MsgSenderError::BlockLengthLimitExceeded(
             "[MsgSenderError] The block length must be smaller than 2^17.".to_string(),
@@ -208,13 +208,13 @@ pub fn send_cancel(
 ) -> Result<(), MsgSenderError> {
     let beginning_byte_index = torrent_status
         .calculate_beginning_byte_index(piece_index)
-        .map_err(|err| MsgSenderError::SendingRequest(format!("{:?}", err)))?;
+        .map_err(|err| MsgSenderError::SendingRequest(format!("{}", err)))?;
     let amount_of_bytes = torrent_status
         .calculate_amount_of_bytes_of_block(torrent_file_data, piece_index, beginning_byte_index)
-        .map_err(|err| MsgSenderError::SendingRequest(format!("{:?}", err)))?;
+        .map_err(|err| MsgSenderError::SendingRequest(format!("{}", err)))?;
     let piece_index = piece_index
         .try_into()
-        .map_err(|error| MsgSenderError::SendingRequest(format!("{:?}", error)))?;
+        .map_err(|error| MsgSenderError::SendingRequest(format!("{}", error)))?;
 
     //habria que ver si ese checkeo sigue siendo necesario
     check_request_or_cancel_fields(amount_of_bytes)?;
@@ -271,7 +271,7 @@ mod test_msg_sender {
 
     impl fmt::Display for PortBindingError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{:?}", self)
+            write!(f, "\n    {:#?}\n", self)
         }
     }
 

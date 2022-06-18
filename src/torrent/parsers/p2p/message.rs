@@ -61,7 +61,7 @@ pub enum P2PMessageDecodingError {
 
 impl fmt::Display for P2PMessageDecodingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 
@@ -76,7 +76,7 @@ pub enum P2PMessageEncodingError {
 
 impl fmt::Display for P2PMessageEncodingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 

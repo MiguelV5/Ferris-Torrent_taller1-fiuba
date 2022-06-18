@@ -17,7 +17,7 @@ pub enum MsgReceiverError {
 
 impl fmt::Display for MsgReceiverError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 
@@ -29,10 +29,10 @@ pub fn receive_handshake(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiv
     let mut buffer = [0; TOTAL_NUM_OF_BYTES_HANDSHAKE].to_vec();
     stream
         .read_exact(&mut buffer)
-        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{:?}", error)))?;
+        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{}", error)))?;
 
     let message = p2p::decoder::from_bytes(&buffer)
-        .map_err(|err| MsgReceiverError::InternalParsing(format!("{:?}", err)))?;
+        .map_err(|err| MsgReceiverError::InternalParsing(format!("{}", err)))?;
     Ok(message)
 }
 
@@ -42,13 +42,13 @@ fn receive_lenght_prefix(
 ) -> Result<usize, MsgReceiverError> {
     stream
         .read_exact(buffer_lenght_prefix)
-        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{:?}", error)))?;
+        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{}", error)))?;
 
     let lenght_prefix_value = p2p::decoder::concatenate_bytes_into_u32(&*buffer_lenght_prefix)
-        .map_err(|err| MsgReceiverError::InternalParsing(format!("{:?}", err)))?;
+        .map_err(|err| MsgReceiverError::InternalParsing(format!("{}", err)))?;
     lenght_prefix_value
         .try_into()
-        .map_err(|err| MsgReceiverError::InternalParsing(format!("{:?}", err)))
+        .map_err(|err| MsgReceiverError::InternalParsing(format!("{}", err)))
 }
 
 fn build_msg(
@@ -61,13 +61,13 @@ fn build_msg(
 
     stream
         .read_exact(&mut buffer_msg)
-        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{:?}", error)))?;
+        .map_err(|error| MsgReceiverError::ReadingFromTcpStream(format!("{}", error)))?;
 
     let mut bytes = buffer_lenght_prefix;
     bytes.append(&mut buffer_msg);
 
     let message = p2p::decoder::from_bytes(&bytes)
-        .map_err(|err| MsgReceiverError::InternalParsing(format!("{:?}", err)))?;
+        .map_err(|err| MsgReceiverError::InternalParsing(format!("{}", err)))?;
     Ok(message)
 }
 
@@ -104,7 +104,7 @@ mod test_msg_receiver {
 
     impl fmt::Display for PortBindingError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{:?}", self)
+            write!(f, "\n    {:#?}\n", self)
         }
     }
 

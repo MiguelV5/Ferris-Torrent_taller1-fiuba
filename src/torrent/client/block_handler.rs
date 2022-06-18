@@ -24,7 +24,7 @@ pub enum BlockHandlerError {
 
 impl fmt::Display for BlockHandlerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "\n    {:#?}\n", self)
     }
 }
 
@@ -40,9 +40,9 @@ pub fn store_block(block: &[u8], piece_index: usize, path: &str) -> Result<(), B
         .create(true)
         .append(true)
         .open(file_name)
-        .map_err(|err| BlockHandlerError::StoringBlock(format!("{:?}", err)))?;
+        .map_err(|err| BlockHandlerError::StoringBlock(format!("{}", err)))?;
     file.write_all(block)
-        .map_err(|err| BlockHandlerError::StoringBlock(format!("{:?}", err)))?;
+        .map_err(|err| BlockHandlerError::StoringBlock(format!("{}", err)))?;
     Ok(())
 }
 
@@ -52,11 +52,11 @@ fn read_a_piece(piece_index: usize, path: &str) -> Result<Vec<u8>, BlockHandlerE
         .create(false)
         .read(true)
         .open(file_name)
-        .map_err(|err| BlockHandlerError::CheckingSha1Piece(format!("{:?}", err)))?;
+        .map_err(|err| BlockHandlerError::CheckingSha1Piece(format!("{}", err)))?;
 
     let mut piece = Vec::new();
     file.read_to_end(&mut piece)
-        .map_err(|err| BlockHandlerError::CheckingSha1Piece(format!("{:?}", err)))?;
+        .map_err(|err| BlockHandlerError::CheckingSha1Piece(format!("{}", err)))?;
 
     Ok(piece)
 }
@@ -96,7 +96,7 @@ pub fn check_sha1_piece(
 
     if piece_sha1 != expected_piece_sha1 {
         fs::remove_file(format!("temp/{}/piece_{}", path, piece_index))
-            .map_err(|err| BlockHandlerError::CheckingSha1Piece(format!("{:?}", err)))?;
+            .map_err(|err| BlockHandlerError::CheckingSha1Piece(format!("{}", err)))?;
         Err(BlockHandlerError::CheckingSha1Piece(
             "The downloaded piece does not pass the sha1 verification.".to_string(),
         ))

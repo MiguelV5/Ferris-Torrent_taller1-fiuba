@@ -3,8 +3,10 @@
 //! el estado actual de una descarga de un torrent
 //!
 
+use std::{error::Error, fmt};
+
 use crate::torrent::{
-    client::peers_comunication::msg_logic_control::BLOCK_BYTES, local_peer::LocalPeer,
+    client::peers_comunication::handler::BLOCK_BYTES, local_peer::LocalPeer,
     parsers::p2p::message::PieceStatus,
 };
 
@@ -17,6 +19,14 @@ pub enum TorrentStatusError {
     CalculatingBeginningByteIndex(String),
     CalculatingAmountOfBytes(String),
 }
+
+impl fmt::Display for TorrentStatusError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\n    {:#?}\n", self)
+    }
+}
+
+impl Error for TorrentStatusError {}
 
 #[derive(PartialEq, Debug, Clone)]
 /// Representa el estado de la descarga COMPLETA del torrent
@@ -114,7 +124,7 @@ impl TorrentStatus {
         //Se la podria modularizar
         let piece_lenght = torrent_file_data
             .calculate_piece_lenght(piece_index)
-            .map_err(|err| TorrentStatusError::UpdatingPieceStatus(format!("{:?}", err)))?;
+            .map_err(|err| TorrentStatusError::UpdatingPieceStatus(format!("{}", err)))?;
 
         if let Some(piece_status) = self.pieces_availability.get_mut(piece_index as usize) {
             match piece_status {
@@ -178,7 +188,7 @@ impl TorrentStatus {
             Some(PieceStatus::PartiallyDownloaded { downloaded_bytes }) => Ok(*downloaded_bytes),
             Some(PieceStatus::MissingPiece) => Ok(0),
             _ => Err(TorrentStatusError::CalculatingBeginningByteIndex(
-                "[MsgLogicControlError] Invalid piece index given in order to calculate beggining byte index."
+                "[InteractionHandlerError] Invalid piece index given in order to calculate beggining byte index."
                     .to_string(),
             )),
         }
@@ -195,9 +205,9 @@ impl TorrentStatus {
     ) -> Result<u32, TorrentStatusError> {
         let piece_length = torrent_file_data
             .calculate_piece_lenght(piece_index)
-            .map_err(|err| TorrentStatusError::CalculatingAmountOfBytes(format!("{:?}", err)))?;
+            .map_err(|err| TorrentStatusError::CalculatingAmountOfBytes(format!("{}", err)))?;
         let piece_lenght = u32::try_from(piece_length)
-            .map_err(|err| TorrentStatusError::CalculatingAmountOfBytes(format!("{:?}", err)))?;
+            .map_err(|err| TorrentStatusError::CalculatingAmountOfBytes(format!("{}", err)))?;
 
         let remaining_bytes = piece_lenght - beginning_byte_index;
         if remaining_bytes <= BLOCK_BYTES {
@@ -239,7 +249,7 @@ mod test_torrent_status {
 
         impl fmt::Display for PortBindingError {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "{:?}", self)
+                write!(f, "\n    {:#?}\n", self)
             }
         }
 
@@ -289,7 +299,7 @@ mod test_torrent_status {
             let handler = thread::spawn(move || listener.accept());
 
             let stream = TcpStream::connect(address)?;
-            handler.join().unwrap()?; // feo pero para probar
+            let _joined = handler.join();
 
             let torrent_status = TorrentStatus {
                 uploaded: 0,
@@ -325,7 +335,7 @@ mod test_torrent_status {
             let handler = thread::spawn(move || listener.accept());
 
             let stream = TcpStream::connect(address)?;
-            handler.join().unwrap()?; // feo pero para probar
+            let _joined = handler.join();
 
             let torrent_status = TorrentStatus {
                 uploaded: 0,
@@ -361,7 +371,7 @@ mod test_torrent_status {
             let handler = thread::spawn(move || listener.accept());
 
             let stream = TcpStream::connect(address)?;
-            handler.join().unwrap()?; // feo pero para probar
+            let _joined = handler.join();
 
             let torrent_status = TorrentStatus {
                 uploaded: 0,
