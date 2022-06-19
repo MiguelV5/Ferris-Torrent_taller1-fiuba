@@ -15,6 +15,7 @@ use crate::torrent::{
         tracker_comunication::http_handler::HttpHandler,
     },
     data::{
+        config_file_data::ConfigFileData,
         peer_data_for_communication::PeerDataForP2PCommunication,
         torrent_file_data::{TorrentFileData, TorrentFileDataError},
         torrent_status::TorrentStatus,
@@ -211,10 +212,13 @@ pub fn create_torrent(torrent_path: &str) -> ResultClient<TorrentFileData> {
 /// Funcion que realiza toda la comunicación con el tracker, interpreta su
 /// respuesta y devuelve la info importante de la misma
 ///
-pub fn communicate_with_tracker(torrent: &TorrentFileData) -> ResultClient<TrackerResponseData> {
+pub fn communicate_with_tracker(
+    torrent: &TorrentFileData,
+    config_data: &ConfigFileData,
+) -> ResultClient<TrackerResponseData> {
     let str_peer_id = String::from_utf8_lossy(&generate_peer_id()).to_string();
     trace!("Creando httpHandler dentro del Client");
-    let http_handler = match HttpHandler::new(torrent, str_peer_id) {
+    let http_handler = match HttpHandler::new(torrent, str_peer_id, config_data) {
         Ok(http) => http,
         Err(error) => {
             error!("Error del cliente al crear HttpHandler");
@@ -740,8 +744,7 @@ mod test_client {
     use std::{
         error::Error,
         fmt,
-        io::ErrorKind,
-        net::{SocketAddr, TcpListener, TcpStream},
+        net::{SocketAddr, TcpStream},
         str::FromStr,
         thread,
     };
@@ -756,6 +759,7 @@ mod test_client {
             constants::PSTR_STRING_HANDSHAKE,
             message::{P2PMessage, PieceStatus},
         },
+        server::listener_binder::*,
     };
 
     #[derive(PartialEq, Debug, Clone)]
@@ -770,55 +774,6 @@ mod test_client {
     }
 
     impl Error for TestingError {}
-
-    const LOCALHOST: &str = "127.0.0.1";
-    const STARTING_PORT: u16 = 8080;
-    const MAX_TESTING_PORT: u16 = 9080;
-
-    #[derive(PartialEq, Debug)]
-    enum PortBindingError {
-        ReachedMaxPortWithoutFindingAnAvailableOne,
-    }
-
-    impl fmt::Display for PortBindingError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "\n    {:#?}\n", self)
-        }
-    }
-
-    impl Error for PortBindingError {}
-
-    fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
-        let mut new_port: u16 = current_port;
-        if current_port >= MAX_TESTING_PORT {
-            Err(PortBindingError::ReachedMaxPortWithoutFindingAnAvailableOne)
-        } else {
-            new_port += 1;
-            Ok(new_port)
-        }
-    }
-
-    // Busca bindear un listener mientras que el error sea por causa de una direccion que ya está en uso.
-    fn try_bind_listener(first_port: u16) -> Result<(TcpListener, String), Box<dyn Error>> {
-        let mut listener = TcpListener::bind(format!("{}:{}", LOCALHOST, first_port));
-
-        let mut current_port = first_port;
-
-        while let Err(bind_err) = listener {
-            if bind_err.kind() != ErrorKind::AddrInUse {
-                return Err(Box::new(bind_err));
-            } else {
-                current_port = update_port(current_port)?;
-                listener = TcpListener::bind(format!("{}:{}", LOCALHOST, current_port));
-            }
-        }
-        let resulting_listener = listener?; // SI BIEN TIENE ?; ACÁ NUNCA VA A SER UN ERROR
-
-        Ok((
-            resulting_listener,
-            format!("{}:{}", LOCALHOST, current_port),
-        ))
-    }
 
     pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
     pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";

@@ -16,22 +16,19 @@ use fa_torrent::torrent::{
         p2p::constants::PSTR_STRING_HANDSHAKE,
         p2p::message::{P2PMessage, PieceStatus},
     },
+    server::listener_binder::*,
 };
 use std::{
     error::Error,
     fs,
-    io::{ErrorKind, Write},
+    io::Write,
     net::{SocketAddr, TcpListener},
     str::FromStr,
     sync::mpsc,
     thread,
 };
 
-const LOCALHOST: &str = "127.0.0.1";
 pub const DEFAULT_ADDR: &str = "127.0.0.1:8080";
-const STARTING_PORT: u16 = 8080;
-const MAX_PORT: u16 = 9080;
-
 pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
 pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
 pub const DEFAULT_SERVER_PEER_ID2: &str = "-FA0001-000000000002";
@@ -201,54 +198,6 @@ fn create_default_client_peer_with_a_server_peer_that_has_the_whole_file(
         total_length: 40000,
     };
     Ok((tracker_response, torrent_status, torrent_file))
-}
-
-//=================================================
-// RELACIONADAS A BIND PARA CONEXIONES:
-
-#[derive(PartialEq, Debug)]
-enum PortBindingError {
-    ReachedMaxPortWithoutFindingAnAvailableOne,
-}
-
-impl fmt::Display for PortBindingError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "\n    {:#?}\n", self)
-    }
-}
-
-impl Error for PortBindingError {}
-
-fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
-    let mut new_port: u16 = current_port;
-    if current_port >= MAX_PORT {
-        Err(PortBindingError::ReachedMaxPortWithoutFindingAnAvailableOne)
-    } else {
-        new_port += 1;
-        Ok(new_port)
-    }
-}
-
-// Busca bindear un listener mientras que el error sea por causa de una direccion que ya está en uso.
-pub fn try_bind_listener(first_port: u16) -> Result<(TcpListener, String), Box<dyn Error>> {
-    let mut listener = TcpListener::bind(format!("{}:{}", LOCALHOST, first_port));
-
-    let mut current_port = first_port;
-
-    while let Err(bind_err) = listener {
-        if bind_err.kind() != ErrorKind::AddrInUse {
-            return Err(Box::new(bind_err));
-        } else {
-            current_port = update_port(current_port)?;
-            listener = TcpListener::bind(format!("{}:{}", LOCALHOST, current_port));
-        }
-    }
-    let resulting_listener = listener?; // SI BIEN TIENE ?; ACÁ NUNCA VA A SER UN ERROR
-
-    Ok((
-        resulting_listener,
-        format!("{}:{}", LOCALHOST, current_port),
-    ))
 }
 
 //=================================================

@@ -29,4 +29,4 @@ pub const MSG_ENDING: &str = "\r\n\r\n";
 pub const IP_CLIENT: &str = "127.0.0.1";
 pub const PORT_HTTPS: &str = ":443";
 pub const STARTED: &str = "started";
-pub const INIT_PORT: u32 = 6881;
+//pub const INIT_PORT: u32 = 6881;

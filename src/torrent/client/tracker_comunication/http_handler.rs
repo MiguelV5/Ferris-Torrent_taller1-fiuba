@@ -10,7 +10,7 @@ use native_tls::TlsConnector;
 
 use super::constants::*;
 use crate::torrent::{
-    data::torrent_file_data::TorrentFileData,
+    data::{config_file_data::ConfigFileData, torrent_file_data::TorrentFileData},
     parsers::{
         bencoding::{self, values::ValuesBencoding},
         url_encoder,
@@ -119,10 +119,14 @@ impl MsgDescriptor {
     ///Funcion que va a crear un MsgDescriptor, la cual necesita para crearse un TorrentFileData y
     /// un peer_id, esta estructura va a servir para crear el mensaje de request al tracker
     ///
-    pub fn new(torrent: &TorrentFileData, peer_id: String) -> ResultMsg<Self> {
+    pub fn new(
+        torrent: &TorrentFileData,
+        peer_id: String,
+        config_data: &ConfigFileData,
+    ) -> ResultMsg<Self> {
         let info_hash = init_info_hash(torrent.get_info_hash());
         let ip = String::from(IP_CLIENT);
-        let port = INIT_PORT;
+        let port = config_data.get_port();
         let uploaded = 0;
         let downloaded = 0;
         let left = torrent.get_total_length() as u64;
@@ -262,10 +266,14 @@ impl HttpHandler {
     /// ya sea enviandole la request y recibiendo su respuesta y devolviendola en el HashMap correspondiente,
     /// esta estructura contiene una estructura MsgDescriptor que va a ser la que creara el request con el tracker,
     /// Para crear el HttpHandler necesitamos pasarle el TorrentFileData correspondiente al .torrent y un peer_id
-    pub fn new(torrent: &TorrentFileData, peer_id: String) -> ResultMsg<Self> {
+    pub fn new(
+        torrent: &TorrentFileData,
+        peer_id: String,
+        config_data: &ConfigFileData,
+    ) -> ResultMsg<Self> {
         let tracker_main = torrent.get_tracker_main();
         Ok(HttpHandler {
-            msg_get: MsgDescriptor::new(torrent, peer_id)?,
+            msg_get: MsgDescriptor::new(torrent, peer_id, config_data)?,
             port: init_port(tracker_main),
         })
     }
@@ -430,7 +438,9 @@ impl HttpHandler {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::torrent::client::medatada_analyzer::read_torrent_file_to_dic;
+    use crate::torrent::{
+        client::medatada_analyzer::read_torrent_file_to_dic, data::config_file_data::ConfigFileData,
+    };
 
     #[test]
     fn test_creation_file1_ok() -> Result<(), Box<dyn Error>> {
@@ -446,10 +456,12 @@ mod test {
             Err(error) => return Err(Box::new(error)),
         };
 
-        let http_handler = match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string()) {
-            Ok(handler) => handler,
-            Err(error) => return Err(Box::new(error)),
-        };
+        let config_data = ConfigFileData::new("config.txt")?;
+        let http_handler =
+            match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string(), &config_data) {
+                Ok(handler) => handler,
+                Err(error) => return Err(Box::new(error)),
+            };
         let info_hash = init_info_hash(torrent.get_info_hash());
 
         let mut msg_get_expected = String::from("GET /announce");
@@ -478,10 +490,12 @@ mod test {
             Err(error) => return Err(Box::new(error)),
         };
 
-        let http_handler = match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string()) {
-            Ok(handler) => handler,
-            Err(error) => return Err(Box::new(error)),
-        };
+        let config_data = ConfigFileData::new("config.txt")?;
+        let http_handler =
+            match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string(), &config_data) {
+                Ok(handler) => handler,
+                Err(error) => return Err(Box::new(error)),
+            };
         let info_hash = init_info_hash(torrent.get_info_hash());
 
         let mut msg_get_expected = String::from("GET /announce");
@@ -516,10 +530,12 @@ mod test {
             Err(error) => return Err(Box::new(error)),
         };
 
-        let http_handler = match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string()) {
-            Ok(handler) => handler,
-            Err(error) => return Err(Box::new(error)),
-        };
+        let config_data = ConfigFileData::new("config.txt")?;
+        let http_handler =
+            match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string(), &config_data) {
+                Ok(handler) => handler,
+                Err(error) => return Err(Box::new(error)),
+            };
         let info_hash = init_info_hash(torrent.get_info_hash());
 
         let mut msg_get_expected = String::from("GET /announce");
@@ -554,10 +570,12 @@ mod test {
             Err(error) => return Err(Box::new(error)),
         };
 
-        let http_handler = match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string()) {
-            Ok(handler) => handler,
-            Err(error) => return Err(Box::new(error)),
-        };
+        let config_data = ConfigFileData::new("config.txt")?;
+        let http_handler =
+            match HttpHandler::new(&torrent, "ABCDEFGHIJKLMNOPQRST".to_string(), &config_data) {
+                Ok(handler) => handler,
+                Err(error) => return Err(Box::new(error)),
+            };
 
         let response = http_handler.check_http_code("HTTP/1.1 200 OK".as_bytes());
         assert_eq!(response, Ok(()));

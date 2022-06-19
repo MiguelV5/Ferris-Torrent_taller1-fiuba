@@ -221,13 +221,7 @@ impl TorrentStatus {
 #[cfg(test)]
 mod test_torrent_status {
     mod test_look_for_a_missing_piece_index {
-        use std::{
-            error::Error,
-            fmt,
-            io::ErrorKind,
-            net::{TcpListener, TcpStream},
-            thread,
-        };
+        use std::{error::Error, net::TcpStream, thread};
 
         use crate::torrent::{
             data::{
@@ -236,56 +230,8 @@ mod test_torrent_status {
             },
             local_peer::{LocalPeer, PeerRole},
             parsers::p2p::message::PieceStatus,
+            server::listener_binder::*,
         };
-
-        const LOCALHOST: &str = "127.0.0.1";
-        const STARTING_PORT: u16 = 8080;
-        const MAX_TESTING_PORT: u16 = 9080;
-
-        #[derive(PartialEq, Debug)]
-        enum PortBindingError {
-            ReachedMaxPortWithoutFindingAnAvailableOne,
-        }
-
-        impl fmt::Display for PortBindingError {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "\n    {:#?}\n", self)
-            }
-        }
-
-        impl Error for PortBindingError {}
-
-        fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
-            let mut new_port: u16 = current_port;
-            if current_port >= MAX_TESTING_PORT {
-                Err(PortBindingError::ReachedMaxPortWithoutFindingAnAvailableOne)
-            } else {
-                new_port += 1;
-                Ok(new_port)
-            }
-        }
-
-        // Busca bindear un listener mientras que el error sea por causa de una direccion que ya está en uso.
-        fn try_bind_listener(first_port: u16) -> Result<(TcpListener, String), Box<dyn Error>> {
-            let mut listener = TcpListener::bind(format!("{}:{}", LOCALHOST, first_port));
-
-            let mut current_port = first_port;
-
-            while let Err(bind_err) = listener {
-                if bind_err.kind() != ErrorKind::AddrInUse {
-                    return Err(Box::new(bind_err));
-                } else {
-                    current_port = update_port(current_port)?;
-                    listener = TcpListener::bind(format!("{}:{}", LOCALHOST, current_port));
-                }
-            }
-            let resulting_listener = listener?; // SI BIEN TIENE ?; ACÁ NUNCA VA A SER UN ERROR
-
-            Ok((
-                resulting_listener,
-                format!("{}:{}", LOCALHOST, current_port),
-            ))
-        }
 
         pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
         pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";

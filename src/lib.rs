@@ -19,6 +19,7 @@ pub mod torrent;
 
 use crate::torrent::{
     client::peers_comunication,
+    data::config_file_data::ConfigFileData,
     data::torrent_status::TorrentStatus,
     entry_files_management,
     local_peer::{communicate_with_tracker, create_torrent},
@@ -35,27 +36,26 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
     info!("Iniciando el programa");
 
+    let config_data = ConfigFileData::new("config.txt")?;
+    info!("Archivo de configuración leido y parseado correctamente");
+
     let files_list = entry_files_management::create_list_files()?;
     let file_path = files_list[0].clone();
     debug!("Archivo ingresado: {}", file_path);
     info!("Archivo ingresado con exito");
 
-    info!("Creacion de la estructura Client");
-    //let mut client_struct = LocalPeer::new()?;
-
     //===========================
 
     let torrent_file = create_torrent(&file_path)?;
-    trace!("TorrentFileData creado y almacenado dentro del Client");
+    trace!("Almacenada y parseada información de metadata");
     let torrent_size = torrent_file.get_total_length() as u64;
     let mut torrent_status = TorrentStatus::new(torrent_size, torrent_file.total_amount_of_pieces);
+    trace!("Creado estado inicial del torrent");
 
     //===========================
 
-    info!("El Client fue creado exitosamente");
-
-    info!("Inicio de comunicacion con tracker mediante Client");
-    let tracker_response = communicate_with_tracker(&torrent_file)?;
+    info!("Iniciando comunicacion con tracker");
+    let tracker_response = communicate_with_tracker(&torrent_file, &config_data)?;
     info!("Comunicacion con el tracker exitosa");
 
     info!("Inicio de comunicacion con peers.");
