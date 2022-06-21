@@ -5,6 +5,7 @@ pub mod client;
 pub mod data;
 pub mod entry_files_management;
 pub mod local_peer;
+pub mod logger;
 pub mod parsers;
 pub mod pieces_handler;
 pub mod server;
