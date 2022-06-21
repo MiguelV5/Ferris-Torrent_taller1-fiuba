@@ -2,11 +2,14 @@
 //! Este modulo contiene las funciones encargadas de leer, analizar e interpretar
 //! la metadata de un archivo .torrent para su posterior uso.
 
-use crate::torrent::parsers::bencoding::{
-    self,
-    values::{ErrorBencoding, ValuesBencoding},
+use crate::torrent::{
+    data::torrent_file_data::{TorrentFileData, TorrentFileDataError},
+    parsers::bencoding::{
+        self,
+        values::{ErrorBencoding, ValuesBencoding},
+    },
 };
-use log::error;
+use log::{error, trace};
 use std::{collections::HashMap, error::Error, ffi::OsStr, fmt, fs::File, io::Read, path::Path};
 
 type ResultMetadata<T> = Result<T, MetadataError>;
@@ -21,6 +24,7 @@ pub enum MetadataError {
     IsNotTorrent,
     Reading,
     TransferToDic(ErrorBencoding),
+    CreatingTorrentFileData(TorrentFileDataError),
 }
 
 impl fmt::Display for MetadataError {
@@ -35,7 +39,7 @@ impl Error for MetadataError {}
 /// Devuelve los bytes correspondientes a un String con la información del
 /// archivo leído, y se encuentra en formato Bencoding
 ///
-pub fn read_torrent_file(filename: &str) -> ResultMetadata<Vec<u8>> {
+fn read_torrent_file(filename: &str) -> ResultMetadata<Vec<u8>> {
     if !check_filename_extension_is_torrent(filename) {
         error!("El archivo ingresado no es .torrent");
         return Err(MetadataError::IsNotTorrent);
@@ -75,6 +79,28 @@ pub fn read_torrent_file_to_dic(filename: &str) -> ResultMetadata<DicValues> {
 fn check_filename_extension_is_torrent(filename: &str) -> bool {
     let extension = Path::new(filename).extension().and_then(OsStr::to_str);
     Some(TORRENT) == extension
+}
+
+/// Funcion que lee toda la metadata y almacena su información importante
+///
+pub fn create_torrent(torrent_path: &str) -> Result<TorrentFileData, MetadataError> {
+    trace!("Leyendo el archivo para poder crear el torrent");
+    let torrent_dic = match read_torrent_file_to_dic(torrent_path) {
+        Ok(dictionary) => dictionary,
+        Err(error) => {
+            error!("Error al leer archivo y pasarlo a HashMap");
+            return Err(error);
+        }
+    };
+    trace!("Arhivo leido y pasado a HashMap exitosamente");
+    trace!("Creando TorrentFileData");
+    match TorrentFileData::new(torrent_dic) {
+        Ok(torrent) => Ok(torrent),
+        Err(error) => {
+            error!("Error al crear la estructura del torrent");
+            Err(MetadataError::CreatingTorrentFileData(error))
+        }
+    }
 }
 
 #[cfg(test)]

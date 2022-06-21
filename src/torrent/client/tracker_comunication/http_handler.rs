@@ -10,7 +10,11 @@ use native_tls::TlsConnector;
 
 use super::constants::*;
 use crate::torrent::{
-    data::{config_file_data::ConfigFileData, torrent_file_data::TorrentFileData},
+    data::{
+        config_file_data::ConfigFileData,
+        torrent_file_data::TorrentFileData,
+        tracker_response_data::{ResponseError, TrackerResponseData},
+    },
     parsers::{
         bencoding::{self, values::ValuesBencoding},
         url_encoder,
@@ -47,6 +51,7 @@ pub enum ErrorMsgHttp {
     HttpDescription(String),
     SendingGetMessage,
     ReadingResponse,
+    SpecificResponseError(ResponseError),
 }
 
 impl fmt::Display for ErrorMsgHttp {
@@ -266,7 +271,7 @@ impl HttpHandler {
     /// ya sea enviandole la request y recibiendo su respuesta y devolviendola en el HashMap correspondiente,
     /// esta estructura contiene una estructura MsgDescriptor que va a ser la que creara el request con el tracker,
     /// Para crear el HttpHandler necesitamos pasarle el TorrentFileData correspondiente al .torrent y un peer_id
-    pub fn new(
+    fn new(
         torrent: &TorrentFileData,
         peer_id: String,
         config_data: &ConfigFileData,
@@ -293,7 +298,7 @@ impl HttpHandler {
         self.msg_get.update_download_stats(more_down, more_up)
     }
 
-    pub fn connect_tcp(&self) -> ResultMsg<Box<dyn ReadAndWrite>> {
+    fn connect_tcp(&self) -> ResultMsg<Box<dyn ReadAndWrite>> {
         let mut addr = self.get_host();
         addr.push_str(&self.port);
         debug!("Conectando TCP con addr: {}", addr);
@@ -310,7 +315,7 @@ impl HttpHandler {
 
     ///Funcion que sirve para conectarse con el tracker correspondiente, en caso de que alguna de las conexiones
     /// falle se devolvera el error correspondiente
-    pub fn connect_tls(&self) -> ResultMsg<Box<dyn ReadAndWrite>> {
+    fn connect_tls(&self) -> ResultMsg<Box<dyn ReadAndWrite>> {
         let connector = match TlsConnector::new() {
             Ok(conected) => conected,
             Err(_) => return Err(ErrorMsgHttp::CreateTls),
@@ -404,7 +409,7 @@ impl HttpHandler {
     ///
     /// -En caso de que haya un error en el envio del request o recepcion de la respuesta se devolvera el error
     ///  correspondiente
-    pub fn tracker_get_response(&self) -> ResultMsg<DicValues> {
+    fn tracker_get_response(&self) -> ResultMsg<DicValues> {
         let https_port = String::from(PORT_HTTPS);
 
         let mut connector = if self.port == https_port {
@@ -432,6 +437,44 @@ impl HttpHandler {
             String::from_utf8_lossy(&response_tracker.clone())
         );
         self.tracker_response_to_dic(response_tracker)
+    }
+}
+
+/// Funcion que realiza toda la comunicación con el tracker, interpreta su
+/// respuesta y devuelve la info importante de la misma
+///
+pub fn communicate_with_tracker(
+    torrent: &TorrentFileData,
+    config_data: &ConfigFileData,
+    peer_id: Vec<u8>,
+) -> Result<TrackerResponseData, ErrorMsgHttp> {
+    let str_peer_id = String::from_utf8_lossy(&peer_id).to_string();
+    trace!("Creando httpHandler dentro del Client");
+    let http_handler = match HttpHandler::new(torrent, str_peer_id, config_data) {
+        Ok(http) => http,
+        Err(error) => {
+            error!("Error del cliente al crear HttpHandler");
+            return Err(error);
+        }
+    };
+    trace!("HttpHandler creado exitosamente");
+    trace!("Comunicacion con el Tracker mediante httpHandler");
+    let response_tracker = match http_handler.tracker_get_response() {
+        Ok(response) => response,
+        Err(error) => {
+            return {
+                error!("Error del cliente al conectarse con el Tracker");
+                Err(error)
+            }
+        }
+    };
+    trace!("Creando el TrackerResponseData en base a la respues del tracker");
+    match TrackerResponseData::new(response_tracker) {
+        Ok(response_struct) => Ok(response_struct),
+        Err(error) => {
+            error!("Error del cliente al recibir respuesta del Tracker");
+            Err(ErrorMsgHttp::SpecificResponseError(error))
+        }
     }
 }
 

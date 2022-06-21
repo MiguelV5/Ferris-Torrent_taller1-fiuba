@@ -57,7 +57,7 @@ fn to_sock_addr(ip: String, port: u16) -> ResultResponse<SocketAddr> {
     Ok(result_addr)
 }
 
-pub fn decode_compact_peer(compact_peer: Vec<u8>) -> ResultResponse<(IpAddr, u16)> {
+fn decode_compact_peer(compact_peer: Vec<u8>) -> ResultResponse<(IpAddr, u16)> {
     let multiplier = 256;
     if compact_peer.len() != 6 {
         return Err(ResponseError::ConvertIp(Section::Ip));

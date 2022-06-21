@@ -18,11 +18,14 @@
 pub mod torrent;
 
 use crate::torrent::{
-    client::peers_comunication,
+    client::{
+        medatada_analyzer::create_torrent, peers_comunication,
+        tracker_comunication::http_handler::communicate_with_tracker,
+    },
     data::config_file_data::ConfigFileData,
     data::torrent_status::TorrentStatus,
     entry_files_management,
-    local_peer::{communicate_with_tracker, create_torrent},
+    local_peer::generate_peer_id,
 };
 
 use log::{debug, info, trace};
@@ -44,18 +47,16 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     debug!("Archivo ingresado: {}", file_path);
     info!("Archivo ingresado con exito");
 
-    //===========================
-
     let torrent_file = create_torrent(&file_path)?;
     trace!("Almacenada y parseada información de metadata");
     let torrent_size = torrent_file.get_total_length() as u64;
     let mut torrent_status = TorrentStatus::new(torrent_size, torrent_file.total_amount_of_pieces);
     trace!("Creado estado inicial del torrent");
 
-    //===========================
+    let peer_id = generate_peer_id();
 
     info!("Iniciando comunicacion con tracker");
-    let tracker_response = communicate_with_tracker(&torrent_file, &config_data)?;
+    let tracker_response = communicate_with_tracker(&torrent_file, &config_data, peer_id.clone())?;
     info!("Comunicacion con el tracker exitosa");
 
     info!("Inicio de comunicacion con peers.");
@@ -63,6 +64,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         &torrent_file,
         &tracker_response,
         &mut torrent_status,
+        peer_id,
     )?;
     info!("Se descargó exitosamente una pieza.");
 

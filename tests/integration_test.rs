@@ -1,7 +1,7 @@
 use core::fmt;
 use fa_torrent::torrent::{
     client::peers_comunication::{
-        handler::{InteractionHandlerError, BLOCK_BYTES},
+        handler::BLOCK_BYTES,
         //InteractionHandlerStatus
         msg_receiver,
     },
@@ -10,7 +10,9 @@ use fa_torrent::torrent::{
         torrent_status::{StateOfDownload, TorrentStatus},
         tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
     },
-    local_peer::LocalPeer,
+    local_peer::{
+        generate_peer_id, InteractionHandlerError, InteractionHandlerErrorKind, LocalPeer,
+    },
     parsers::{
         p2p,
         p2p::constants::PSTR_STRING_HANDSHAKE,
@@ -722,8 +724,11 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
         }
     });
 
+    let peer_id = generate_peer_id();
+
     //INICIO LA COMUNICACION DEL LADO DEL CLIENTE
-    let local_peer = LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0)?;
+    let local_peer =
+        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0, peer_id)?;
     // Obtengo el handshake que le habia llegado al server mock
     let handshake_received_by_server_peer = rx.recv()?;
 
@@ -766,18 +771,20 @@ fn client_peer_interact_with_a_peer_and_receives_one_block_ok() -> Result<(), Bo
         let _result = server_peer_interaction_mock_for_receiving_one_block(listener);
     });
 
+    let peer_id = generate_peer_id();
+
     let mut client_peer =
-        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0)?;
+        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0, peer_id)?;
 
     let interaction_result =
         client_peer.interact_with_peer(&torrent_file_data, &mut torrent_status);
 
     //VEO QUE LE HAYA LLEGADO Y QUE ADEMAS LO ACEPTE
     assert_eq!(
-        Err(InteractionHandlerError::UpdatingBitfield(
+        Err(InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UpdatingBitfield(
             "\n    CheckingBitfield(\n    \"[TorrentFileDataError] Some of the spare bits are set.\",\n)\n"
                 .to_string()
-        )),
+        ))),
         interaction_result
     );
 
@@ -836,8 +843,10 @@ fn client_peer_interact_with_a_peer_and_receives_one_block_ok() -> Result<(), Bo
 //         let _result = server_peer_interaction_mock_for_receiving_an_entire_piece(listener);
 //     });
 
+//     let peer_id = generate_peer_id();
+
 //     let mut client_peer =
-//         LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0)?;
+//         LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0, peer_id)?;
 
 //     let interaction_result =
 //         client_peer.interact_with_peer(&torrent_file_data, &mut torrent_status);
@@ -912,10 +921,15 @@ fn client_peer_interact_with_a_peer_that_shuts_down_the_connection_and_then_inte
         let _result =
             server_peer_interaction_mock_for_receiving_an_entire_piece_without_shutdown(listener2);
     });
+    let peer_id = generate_peer_id();
 
     //INTERACTUA CLIENTE QUE CORTA CONEXION:
-    let mut client_peer =
-        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 0)?;
+    let mut client_peer = LocalPeer::start_communication(
+        &torrent_file_data,
+        &tracker_response_data,
+        0,
+        peer_id.clone(),
+    )?;
     let interaction_result =
         client_peer.interact_with_peer(&torrent_file_data, &mut torrent_status);
     assert!(interaction_result.is_err());
@@ -931,7 +945,7 @@ fn client_peer_interact_with_a_peer_that_shuts_down_the_connection_and_then_inte
 
     //INTERACTUA CLIENTE QUE DEBERIA FINALIZAR LA PIEZA CORRECTAMENTE:
     let mut client_peer =
-        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 1)?;
+        LocalPeer::start_communication(&torrent_file_data, &tracker_response_data, 1, peer_id)?;
     let interaction_result =
         client_peer.interact_with_peer(&torrent_file_data, &mut torrent_status);
     assert!(interaction_result.is_ok());
