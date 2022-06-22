@@ -12,7 +12,8 @@ pub const TWO_POINTS: &[u8; ONE] = b":";
 pub const END_LINE: &[u8; TWO] = b"\r\n";
 pub const DOUBLE_END_LINE: &[u8; FOUR] = b"\r\n\r\n";
 
-pub const INIT_MSG: &str = "GET /announce";
+pub const INIT_MSG: &str = "GET ";
+pub const ANNOUNCE: &str = "/announce";
 pub const INFO_HASH: &str = "?info_hash=";
 pub const PEER_ID: &str = "&peer_id=";
 pub const IP: &str = "&ip=";

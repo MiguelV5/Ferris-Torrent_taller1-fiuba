@@ -72,6 +72,7 @@ struct MsgDescriptor {
     left: u64,
     event: String,
     host: String,
+    get: String,
 }
 
 fn vec_u8_to_string(vec: &[u8]) -> String {
@@ -115,6 +116,25 @@ fn init_host(tracker: String) -> ResultMsg<String> {
     }
 }
 
+fn init_get(tracker: String) -> ResultMsg<String> {
+    let u8_tracker = tracker.as_bytes();
+    //Voy a quitar todo lo que este por detras del "//"
+    match find_index_msg(u8_tracker, THREE, HTTP_END) {
+        Some(pos) => {
+            let first = pos + THREE;
+            //Voy a quitar todo lo que este por delante del "/"
+            match find_index_msg(&u8_tracker[first..], ONE, LAST_SLASH) {
+                Some(pos) => {
+                    let getter = pos + first;
+                    Ok(vec_u8_to_string(&u8_tracker[getter..].to_vec()))
+                }
+                None => Ok(String::from(ANNOUNCE)),
+            }
+        }
+        None => Err(ErrorMsgHttp::NoAnnounce),
+    }
+}
+
 fn add_description_msg(msg: &mut String, type_msg: &str, value: String) {
     msg.push_str(type_msg);
     msg.push_str(&value);
@@ -137,6 +157,7 @@ impl MsgDescriptor {
         let left = torrent.get_total_length() as u64;
         let event = String::from(STARTED);
         let host = init_host(torrent.get_tracker_main())?;
+        let get = init_get(torrent.get_tracker_main())?;
 
         Ok(MsgDescriptor {
             info_hash,
@@ -148,6 +169,7 @@ impl MsgDescriptor {
             left,
             event,
             host,
+            get,
         })
     }
     ///Esta funcion devuelve el info_hash [ver [TorrentFileData]] url encodeado
@@ -192,6 +214,9 @@ impl MsgDescriptor {
     pub fn get_host(&self) -> String {
         self.host.clone()
     }
+    pub fn get_getter(&self) -> String {
+        self.get.clone()
+    }
 
     ///Esta funcion cambia el puerto para la comunicacion con el tracker, los puertos
     /// validos son del 6881 al 6889 si el cambio es exitoso devolvera Ok(()), en caso de llegar al
@@ -214,7 +239,8 @@ impl MsgDescriptor {
     }
     ///Funcion que devuelve el mensaje que debera ser enviado al tracker
     pub fn get_send_msg(&self) -> ResultMsg<String> {
-        let mut result = String::from(INIT_MSG);
+        let mut result = String::new();
+        add_description_msg(&mut result, INIT_MSG, self.get_getter());
         add_description_msg(&mut result, INFO_HASH, self.get_info_hash());
         add_description_msg(&mut result, PEER_ID, self.get_peer_id());
         add_description_msg(&mut result, IP, self.get_ip());
