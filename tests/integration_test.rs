@@ -181,17 +181,11 @@ fn create_default_client_peer_with_a_server_peer_that_has_the_whole_file(
             //1º pieza -> 34000 bytes
             //2º pieza ->  6000 bytes
         },
-        // sha1_pieces: vec![
-        //     46, 101, 88, 42, 242, 153, 87, 30, 42, 117, 240, 135, 191, 37, 12, 42, 175, 156, 136,
-        //     214, 95, 100, 198, 139, 237, 56, 161, 225, 113, 168, 52, 228, 26, 36, 103, 150, 103,
-        //     76, 233, 34,
-        // ], MIGUEL: De donde sale este sha1 de la 1ra pieza? porque me estaba fallando a la hora de testear la pieza completa. El sha1 correspondiente que me dio es:
-        //"ca9f2e3d336085c432baf198d63f83c678965323":
         sha1_pieces: vec![
             202, 159, 46, 61, 51, 96, 133, 196, 50, 186, 241, 152, 214, 63, 131, 198, 120, 150, 83,
             35, 95, 100, 198, 139, 237, 56, 161, 225, 113, 168, 52, 228, 26, 36, 103, 150, 103, 76,
             233, 34,
-        ], //Ojo que a partir del 96 de la segunda linea (96 inclusive) es el sha1 de la 2da pieza. Creo que esa estaba bien de antes
+        ], //Ojo que a partir del 95 de la segunda linea (95 inclusive) es el sha1 de la 2da pieza.
         url_tracker_main: "tracker_main.com".to_string(),
         url_tracker_list: vec![],
         sha1_info_hash: DEFAULT_INFO_HASH.to_vec(),
