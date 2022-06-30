@@ -129,7 +129,7 @@ impl TorrentStatus {
         if let Some(piece_status) = self.pieces_availability.get_mut(piece_index as usize) {
             match piece_status {
                 PieceStatus::MissingPiece => {
-                    if piece_lenght == amount_of_bytes.into() {
+                    if piece_lenght == (amount_of_bytes as u64) {
                         *piece_status = PieceStatus::ValidAndAvailablePiece;
                     } else {
                         *piece_status = PieceStatus::PartiallyDownloaded {

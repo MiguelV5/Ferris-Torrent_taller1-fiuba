@@ -1,0 +1,36 @@
+window {
+  background-color: rgb(43, 4, 53);
+}
+
+stack.stack_main {
+	background-image: linear-gradient(-225deg, #1c0952 0%, #2f1a7c 52%, #0c4872 100%);
+}
+
+
+stack.stack_info {
+  background-image: linear-gradient(60deg, #29323c 0%, #485563 100%);
+  border-style: outset;
+  border-width: 5px;
+  border-color: rgb(34, 33, 33);
+}
+
+label {
+  color: rgb(255, 255, 255);
+  border-color: rgb(37, 37, 37);
+  font-weight: bold;
+}
+
+button {
+  border:2px solid rgba(0, 3, 39, 0.788);
+}
+
+
+button:hover {
+  border-color: rgba(224, 219, 226, 0.658);
+  transition:.4s;
+}
+
+button:active {
+  background-color: rgb(10, 1, 14);
+  color: rgb(39, 36, 36);
+}
