@@ -464,12 +464,24 @@ mod tests_p2p_encoder {
         fn encode_bitfield_that_should_set_least_significant_bits_on_single_byte_ok() {
             let msg_to_send = P2PMessage::Bitfield {
                 bitfield: vec![
-                    PieceStatus::MissingPiece,
-                    PieceStatus::MissingPiece,
-                    PieceStatus::MissingPiece,
-                    PieceStatus::MissingPiece,
-                    PieceStatus::MissingPiece,
-                    PieceStatus::MissingPiece,
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
                     PieceStatus::ValidAndAvailablePiece,
                     PieceStatus::ValidAndAvailablePiece,
                 ],
@@ -488,9 +500,15 @@ mod tests_p2p_encoder {
                     PieceStatus::ValidAndAvailablePiece,
                     PieceStatus::ValidAndAvailablePiece,
                     PieceStatus::ValidAndAvailablePiece,
-                    PieceStatus::MissingPiece,
-                    PieceStatus::MissingPiece,
-                    PieceStatus::MissingPiece,
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
                 ],
             };
             let expected_bytes = vec![0, 0, 0, 2, ID_BITFIELD, 0b11111000];
@@ -506,7 +524,9 @@ mod tests_p2p_encoder {
                 bitfield: vec![
                     PieceStatus::ValidAndAvailablePiece,
                     PieceStatus::ValidAndAvailablePiece,
-                    PieceStatus::MissingPiece,
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
                     PieceStatus::ValidAndAvailablePiece,
                 ],
             };
@@ -518,11 +538,21 @@ mod tests_p2p_encoder {
         // funcion de ayuda para los dos test siguientes
         fn build_multiple_bytes_bitfield() -> Vec<PieceStatus> {
             let mut result = vec![PieceStatus::ValidAndAvailablePiece; 9];
-            let mut aux_vec = vec![PieceStatus::MissingPiece; 6];
+            let mut aux_vec = vec![
+                PieceStatus::MissingPiece {
+                    was_requested: false
+                };
+                6
+            ];
             aux_vec.push(PieceStatus::ValidAndAvailablePiece);
 
             result.append(&mut aux_vec);
-            aux_vec = vec![PieceStatus::MissingPiece; 8];
+            aux_vec = vec![
+                PieceStatus::MissingPiece {
+                    was_requested: false
+                };
+                8
+            ];
             result.append(&mut aux_vec);
 
             result

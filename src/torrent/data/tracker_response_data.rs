@@ -207,6 +207,10 @@ impl TrackerResponseData {
             false
         }
     }
+
+    pub fn get_total_amount_peers(&self) -> usize {
+        self.peers.len()
+    }
 }
 
 #[cfg(test)]
@@ -312,6 +316,7 @@ mod test {
 
         assert_eq!(port, Err(ResponseError::NotFound(Section::Interval)))
     }
+
     //    #[test]
     //    fn test_from_str_to_ipaddr_ok() {
     //        let ip = String::from("197.0.12.1");

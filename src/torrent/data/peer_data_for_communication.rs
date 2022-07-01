@@ -35,7 +35,12 @@ pub struct PeerDataForP2PCommunication {
 
 fn generate_empty_bitfield(total_amount_pieces: usize) -> Vec<PieceStatus> {
     let mut pieces_availability = Vec::with_capacity(total_amount_pieces);
-    pieces_availability.resize(total_amount_pieces, PieceStatus::MissingPiece);
+    pieces_availability.resize(
+        total_amount_pieces,
+        PieceStatus::MissingPiece {
+            was_requested: false,
+        },
+    );
     pieces_availability
 }
 

@@ -29,7 +29,10 @@ use crate::torrent::{
 };
 
 use log::{debug, info, trace};
-use std::error::Error;
+use std::{
+    error::Error,
+    sync::{Arc, RwLock},
+};
 
 /// Funcion principal de ejecución del programa.
 /// (En su version actual) Realiza todo lo necesario para descargar una pieza válida a partir de un archivo .torrent dado por consola.
@@ -38,6 +41,7 @@ use std::error::Error;
 pub fn run() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
     info!("Iniciando el programa");
+    let shut_down = Arc::new(RwLock::new(false));
 
     let config_data = ConfigFileData::new("config.txt")?;
     info!("Archivo de configuración leido y parseado correctamente");
@@ -50,7 +54,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let torrent_file = create_torrent(&file_path)?;
     trace!("Almacenada y parseada información de metadata");
     let torrent_size = torrent_file.get_total_length() as u64;
-    let mut torrent_status = TorrentStatus::new(torrent_size, torrent_file.total_amount_of_pieces);
+    let torrent_status = TorrentStatus::new(torrent_size, torrent_file.total_amount_of_pieces);
     trace!("Creado estado inicial del torrent");
 
     let peer_id = generate_peer_id();
@@ -60,11 +64,13 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     info!("Comunicacion con el tracker exitosa");
 
     info!("Inicio de comunicacion con peers.");
-    peers_comunication::handler::handle_general_interaction_as_client(
-        &torrent_file,
-        &tracker_response,
-        &mut torrent_status,
+    peers_comunication::handler::handle_general_interaction_with_peers(
+        torrent_file,
+        tracker_response,
+        torrent_status,
+        &config_data,
         peer_id,
+        shut_down,
     )?;
     info!("Se descargó exitosamente una pieza.");
 

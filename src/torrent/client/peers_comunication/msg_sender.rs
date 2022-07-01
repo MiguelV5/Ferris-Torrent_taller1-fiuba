@@ -284,7 +284,9 @@ mod test_msg_sender {
             downloaded: 0,
             left: 16,
             event: StateOfDownload::Started,
-            pieces_availability: vec![PieceStatus::MissingPiece],
+            pieces_availability: vec![PieceStatus::MissingPiece {
+                was_requested: false,
+            }],
         };
         let torrent_file = TorrentFileData {
             target_files_data: TargetFilesData::SingleFile {
@@ -471,14 +473,30 @@ mod test_msg_sender {
         let received_msg = msg_receiver::receive_message(&mut receptor_stream)?;
         let expected_msg = P2PMessage::Bitfield {
             bitfield: vec![
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
             ],
         };
 
@@ -503,13 +521,27 @@ mod test_msg_sender {
         let expected_msg = P2PMessage::Bitfield {
             bitfield: vec![
                 PieceStatus::ValidAndAvailablePiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
-                PieceStatus::MissingPiece,
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
+                PieceStatus::MissingPiece {
+                    was_requested: false,
+                },
             ],
         };
 
@@ -543,6 +575,7 @@ mod test_msg_sender {
             event: StateOfDownload::Started,
             pieces_availability: vec![PieceStatus::PartiallyDownloaded {
                 downloaded_bytes: 4,
+                was_requested: false,
             }],
         };
 
@@ -637,6 +670,7 @@ mod test_msg_sender {
             event: StateOfDownload::Started,
             pieces_availability: vec![PieceStatus::PartiallyDownloaded {
                 downloaded_bytes: 4,
+                was_requested: false,
             }],
         };
 

@@ -7,6 +7,7 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::{collections::HashMap, error::Error, fmt};
 
+use crate::torrent::client::peers_comunication::handler::BLOCK_BYTES;
 use crate::torrent::parsers::p2p::message::PieceStatus;
 use crate::torrent::parsers::{bencoding::values::ValuesBencoding, *};
 use rand::seq::SliceRandom;
@@ -47,6 +48,7 @@ pub enum TorrentFileDataError {
     Creation(Section),
     Calculation(Section),
     CheckingBitfield(String),
+    CheckingRequestBlock(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -451,26 +453,24 @@ impl TorrentFileData {
         Ok(())
     }
 
-    pub fn generate_representative_tmp_path_for_pieces(&self) -> String {
-        let torrent_tmp_name = match &self.target_files_data {
-            TargetFilesData::SingleFile {
-                file_name,
-                file_length: _,
-            } => {
-                let tmp_name = Path::new(&file_name)
-                    .file_stem()
-                    .map_or(Some("unnamed"), OsStr::to_str)
-                    .map_or("unnamed_torrent", |name| name);
-                format!("{}_{}", "pieces_from", tmp_name)
-            }
-            TargetFilesData::MultipleFiles {
-                dir_name,
-                list_of_files_data: _,
-            } => {
-                format!("{}_{}", "pieces_from", dir_name)
-            }
-        };
-        torrent_tmp_name
+    pub fn check_requested_block(
+        &self,
+        piece_index: usize,
+        beginning_byte_index: u32,
+        amount_of_bytes: u32,
+    ) -> Result<(), TorrentFileDataError> {
+        let piece_length = self.calculate_piece_lenght(piece_index)?;
+        if u64::from(beginning_byte_index + amount_of_bytes) >= piece_length {
+            return Err(TorrentFileDataError::CheckingRequestBlock("[TorrentFileDataError] The requested amount of bytes does not match with piece lenght.".to_string()));
+        }
+
+        if amount_of_bytes > BLOCK_BYTES {
+            return Err(TorrentFileDataError::CheckingRequestBlock(
+                "[TorrentFileDataError] The requested amount of bytes is bigger than 2^14 bytes."
+                    .to_string(),
+            ));
+        }
+        Ok(())
     }
 }
 

@@ -5,8 +5,13 @@ use std::{error::Error, fmt};
 /// (Teniendo un vector de PieceStatuses se puede representar el Bitfield de forma comoda)
 pub enum PieceStatus {
     ValidAndAvailablePiece,
-    PartiallyDownloaded { downloaded_bytes: u32 },
-    MissingPiece,
+    PartiallyDownloaded {
+        downloaded_bytes: u32,
+        was_requested: bool,
+    },
+    MissingPiece {
+        was_requested: bool,
+    },
 }
 
 #[derive(PartialEq, Debug, Clone)]

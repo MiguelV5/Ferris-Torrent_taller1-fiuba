@@ -12,6 +12,7 @@ use std::{
     error::Error,
     fs::{self, OpenOptions},
     io::{Read, Write},
+    os::unix::prelude::FileExt,
 };
 
 /// Representa un error de manejo de almacenamiento de bloque.
@@ -20,6 +21,7 @@ pub enum BlockHandlerError {
     StoringBlock(String),
     CheckingSha1Piece(String),
     IncorrectSha1Piece(String),
+    GettingBlock(String),
 }
 
 impl fmt::Display for BlockHandlerError {
@@ -105,6 +107,28 @@ pub fn check_sha1_piece(
     }
 }
 
+pub fn get_block(
+    piece_index: u32,
+    beginning_byte_index: u32,
+    amount_of_bytes: u32,
+    path: &str,
+) -> Result<Vec<u8>, BlockHandlerError> {
+    let amount_of_bytes = amount_of_bytes
+        .try_into()
+        .map_err(|err| BlockHandlerError::GettingBlock(format!("{}", err)))?;
+    let file_name = format!("temp/{}/piece_{}", path, piece_index);
+
+    let mut block = vec![0; amount_of_bytes];
+
+    let file = OpenOptions::new()
+        .read(true)
+        .open(file_name)
+        .map_err(|err| BlockHandlerError::GettingBlock(format!("{}", err)))?;
+    file.read_exact_at(&mut block, beginning_byte_index.into())
+        .map_err(|err| BlockHandlerError::GettingBlock(format!("{}", err)))?;
+    Ok(block)
+}
+
 #[cfg(test)]
 mod test_block_handler {
     use super::*;
@@ -114,53 +138,163 @@ mod test_block_handler {
         io::Read,
     };
 
-    #[test]
-    fn one_block_can_be_stored() -> Result<(), Box<dyn Error>> {
-        let block = [1; 16].to_vec();
-        let piece_index = 0;
+    mod test_get_block {
+        use super::*;
 
-        let path = "test_block_handler/store_block_1".to_string();
-        fs::create_dir(format!("temp/{}", path))?;
+        #[test]
+        fn first_block_can_be_gotten_ok() -> Result<(), Box<dyn Error>> {
+            let expected_block = [1; 16].to_vec();
+            let piece_index = 0;
+            let beginning_byte_index = 0;
+            let amount_of_bytes = 16;
 
-        store_block(&block, piece_index, &path)?;
+            let path = "test_block_handler/get_block_1".to_string();
+            fs::create_dir(format!("temp/{}", path))?;
 
-        let mut file = File::open(format!("temp/{}/piece_{}", path, piece_index))?;
-        let mut file_block: Vec<u8> = Vec::new();
+            store_block(&expected_block, piece_index, &path)?;
+            let received_block = get_block(
+                piece_index.try_into()?,
+                beginning_byte_index,
+                amount_of_bytes,
+                &path,
+            )?;
 
-        file.read_to_end(&mut file_block)?;
+            assert_eq!(expected_block, received_block);
 
-        assert_eq!(block, file_block);
+            fs::remove_dir_all(format!("temp/{}", path))?;
+            Ok(())
+        }
 
-        fs::remove_dir_all(format!("temp/{}", path))?;
-        Ok(())
+        #[test]
+        fn last_block_can_be_gotten_ok() -> Result<(), Box<dyn Error>> {
+            let block_0 = [0; 16].to_vec();
+            let block_1 = [1; 16].to_vec();
+            let block_2 = [2; 16].to_vec();
+            let piece_index = 0;
+            let beginning_byte_index = 32;
+            let amount_of_bytes = 16;
+
+            let path = "test_block_handler/get_block_2".to_string();
+            fs::create_dir(format!("temp/{}", path))?;
+
+            store_block(&block_0, piece_index, &path)?;
+            store_block(&block_1, piece_index, &path)?;
+            store_block(&block_2, piece_index, &path)?;
+
+            let received_block = get_block(
+                piece_index.try_into()?,
+                beginning_byte_index,
+                amount_of_bytes,
+                &path,
+            )?;
+
+            assert_eq!(block_2, received_block);
+
+            fs::remove_dir_all(format!("temp/{}", path))?;
+            Ok(())
+        }
+
+        #[test]
+        fn all_blocks_can_be_gotten_ok() -> Result<(), Box<dyn Error>> {
+            let block_0 = [0; 16].to_vec();
+            let block_1 = [1; 16].to_vec();
+            let block_2 = [2; 16].to_vec();
+            let piece_index = 0;
+            let beginning_byte_index = 0;
+            let amount_of_bytes = 16;
+
+            let path = "test_block_handler/get_block_3".to_string();
+            fs::create_dir(format!("temp/{}", path))?;
+
+            store_block(&block_0, piece_index, &path)?;
+            store_block(&block_1, piece_index, &path)?;
+            store_block(&block_2, piece_index, &path)?;
+
+            let received_block_0 = get_block(
+                piece_index.try_into()?,
+                beginning_byte_index,
+                amount_of_bytes,
+                &path,
+            )?;
+
+            let beginning_byte_index = beginning_byte_index + 16;
+
+            let received_block_1 = get_block(
+                piece_index.try_into()?,
+                beginning_byte_index,
+                amount_of_bytes,
+                &path,
+            )?;
+
+            let beginning_byte_index = beginning_byte_index + 16;
+
+            let received_block_2 = get_block(
+                piece_index.try_into()?,
+                beginning_byte_index,
+                amount_of_bytes,
+                &path,
+            )?;
+
+            assert_eq!(block_0, received_block_0);
+            assert_eq!(block_1, received_block_1);
+            assert_eq!(block_2, received_block_2);
+
+            fs::remove_dir_all(format!("temp/{}", path))?;
+            Ok(())
+        }
     }
 
-    #[test]
-    fn multiple_blocks_can_be_stored() -> Result<(), Box<dyn Error>> {
-        let block_0 = [0; 16].to_vec();
-        let mut block_1 = [1; 16].to_vec();
-        let mut block_2 = [2; 16].to_vec();
-        let piece_index = 0;
+    mod test_store_block {
+        use super::*;
 
-        let path = "test_block_handler/store_block_2".to_string();
-        fs::create_dir(format!("temp/{}", path))?;
+        #[test]
+        fn one_block_can_be_stored() -> Result<(), Box<dyn Error>> {
+            let block = [1; 16].to_vec();
+            let piece_index = 0;
 
-        store_block(&block_0, piece_index, &path)?;
-        store_block(&block_1, piece_index, &path)?;
-        store_block(&block_2, piece_index, &path)?;
+            let path = "test_block_handler/store_block_1".to_string();
+            fs::create_dir(format!("temp/{}", path))?;
 
-        let mut expected_block = block_0;
-        expected_block.append(&mut block_1);
-        expected_block.append(&mut block_2);
+            store_block(&block, piece_index, &path)?;
 
-        let mut file = File::open(format!("temp/{}/piece_{}", path, piece_index))?;
-        let mut file_block: Vec<u8> = Vec::new();
+            let mut file = File::open(format!("temp/{}/piece_{}", path, piece_index))?;
+            let mut file_block: Vec<u8> = Vec::new();
 
-        file.read_to_end(&mut file_block)?;
+            file.read_to_end(&mut file_block)?;
 
-        assert_eq!(expected_block, file_block);
+            assert_eq!(block, file_block);
 
-        fs::remove_dir_all(format!("temp/{}", path))?;
-        Ok(())
+            fs::remove_dir_all(format!("temp/{}", path))?;
+            Ok(())
+        }
+
+        #[test]
+        fn multiple_blocks_can_be_stored() -> Result<(), Box<dyn Error>> {
+            let block_0 = [0; 16].to_vec();
+            let mut block_1 = [1; 16].to_vec();
+            let mut block_2 = [2; 16].to_vec();
+            let piece_index = 0;
+
+            let path = "test_block_handler/store_block_2".to_string();
+            fs::create_dir(format!("temp/{}", path))?;
+
+            store_block(&block_0, piece_index, &path)?;
+            store_block(&block_1, piece_index, &path)?;
+            store_block(&block_2, piece_index, &path)?;
+
+            let mut expected_block = block_0;
+            expected_block.append(&mut block_1);
+            expected_block.append(&mut block_2);
+
+            let mut file = File::open(format!("temp/{}/piece_{}", path, piece_index))?;
+            let mut file_block: Vec<u8> = Vec::new();
+
+            file.read_to_end(&mut file_block)?;
+
+            assert_eq!(expected_block, file_block);
+
+            fs::remove_dir_all(format!("temp/{}", path))?;
+            Ok(())
+        }
     }
 }

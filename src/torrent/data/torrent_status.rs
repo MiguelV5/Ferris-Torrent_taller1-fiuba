@@ -5,6 +5,8 @@
 
 use std::{error::Error, fmt};
 
+use log::debug;
+
 use crate::torrent::{
     client::peers_comunication::handler::BLOCK_BYTES, local_peer::LocalPeer,
     parsers::p2p::message::PieceStatus,
@@ -46,13 +48,30 @@ pub struct TorrentStatus {
     pub pieces_availability: Vec<PieceStatus>,
 }
 
+fn is_valid_piece_to_request(piece_status: &PieceStatus) -> bool {
+    matches!(
+        *piece_status,
+        PieceStatus::MissingPiece {
+            was_requested: false,
+        } | PieceStatus::PartiallyDownloaded {
+            was_requested: false,
+            ..
+        }
+    )
+}
+
 impl TorrentStatus {
     /// Funcion que crea informacion inicial del estado de descarga de un
     /// torrent.
     ///
     pub fn new(size_torrent: u64, total_amount_pieces: usize) -> Self {
         let mut pieces_availability = Vec::with_capacity(total_amount_pieces);
-        pieces_availability.resize(total_amount_pieces, PieceStatus::MissingPiece);
+        pieces_availability.resize(
+            total_amount_pieces,
+            PieceStatus::MissingPiece {
+                was_requested: false,
+            },
+        );
 
         TorrentStatus {
             uploaded: 0,
@@ -67,7 +86,10 @@ impl TorrentStatus {
     ///
     pub fn is_a_missing_piece(&self, piece_index: usize) -> bool {
         if let Some(piece_status) = self.pieces_availability.get(piece_index) {
-            *piece_status == PieceStatus::MissingPiece
+            *piece_status
+                == PieceStatus::MissingPiece {
+                    was_requested: false,
+                }
         } else {
             false
         }
@@ -83,24 +105,6 @@ impl TorrentStatus {
         }
     }
 
-    /// Funcion que reinicia la data de la descarga actual desde cero
-    ///
-    pub fn flush_data(&mut self, size_torrent: u64) {
-        self.uploaded = 0;
-        self.downloaded = 0;
-        self.left = size_torrent;
-        self.event = StateOfDownload::Started;
-
-        for piece_status in &mut self.pieces_availability {
-            if let PieceStatus::PartiallyDownloaded {
-                downloaded_bytes: _,
-            } = *piece_status
-            {
-                *piece_status = PieceStatus::MissingPiece;
-            }
-        }
-    }
-
     pub fn get_piece_status(&self, piece_index: usize) -> Option<&PieceStatus> {
         self.pieces_availability.get(piece_index)
     }
@@ -109,9 +113,13 @@ impl TorrentStatus {
         self.pieces_availability.clone()
     }
 
-    fn increment_downloaded_counter(&mut self, amount_of_bytes: u64) {
+    pub fn increment_downloaded_counter(&mut self, amount_of_bytes: u64) {
         self.downloaded += amount_of_bytes;
         self.left -= amount_of_bytes;
+    }
+
+    pub fn increment_uploaded_counter(&mut self, amount_of_bytes: u64) {
+        self.uploaded += amount_of_bytes;
     }
 
     pub fn update_piece_status(
@@ -126,19 +134,25 @@ impl TorrentStatus {
             .calculate_piece_lenght(piece_index)
             .map_err(|err| TorrentStatusError::UpdatingPieceStatus(format!("{}", err)))?;
 
-        if let Some(piece_status) = self.pieces_availability.get_mut(piece_index as usize) {
+        if let Some(piece_status) = self.pieces_availability.get_mut(piece_index) {
             match piece_status {
-                PieceStatus::MissingPiece => {
-                    if piece_lenght == (amount_of_bytes as u64) {
+                PieceStatus::MissingPiece {
+                    was_requested: true,
+                } => {
+                    if piece_lenght == amount_of_bytes.into() {
                         *piece_status = PieceStatus::ValidAndAvailablePiece;
                     } else {
                         *piece_status = PieceStatus::PartiallyDownloaded {
                             downloaded_bytes: amount_of_bytes,
+                            was_requested: false,
                         };
                     }
                     self.increment_downloaded_counter(amount_of_bytes.into())
                 }
-                PieceStatus::PartiallyDownloaded { downloaded_bytes } => {
+                PieceStatus::PartiallyDownloaded {
+                    downloaded_bytes,
+                    was_requested: true,
+                } => {
                     let remaining_bytes =
                         piece_lenght - u64::from(*downloaded_bytes + amount_of_bytes);
                     if remaining_bytes == 0 {
@@ -146,6 +160,7 @@ impl TorrentStatus {
                     } else {
                         *piece_status = PieceStatus::PartiallyDownloaded {
                             downloaded_bytes: beginning_byte_index + amount_of_bytes,
+                            was_requested: false,
                         };
                     }
                     self.increment_downloaded_counter(amount_of_bytes.into())
@@ -155,8 +170,18 @@ impl TorrentStatus {
                         "[TorrentStatusError] The piece has already been completed.".to_string(),
                     ))
                 }
+                _ => {
+                    return Err(TorrentStatusError::UpdatingPieceStatus(
+                        "[TorrentStatusError] The received piece was not requested before."
+                            .to_string(),
+                    ))
+                }
             }
         };
+        debug!(
+            "Nuevo estado de la pieza {}: {:?}",
+            piece_index, self.pieces_availability[piece_index]
+        );
         Ok(())
     }
 
@@ -169,7 +194,7 @@ impl TorrentStatus {
                 .iter()
                 .enumerate()
                 .find(|(piece_index, piece_status)| {
-                    (**piece_status != PieceStatus::ValidAndAvailablePiece)
+                    is_valid_piece_to_request(piece_status)
                         && local_peer
                             .external_peer_has_a_valid_and_available_piece_on_position(*piece_index)
                 })?;
@@ -185,8 +210,8 @@ impl TorrentStatus {
     ) -> Result<u32, TorrentStatusError> {
         match self.pieces_availability.get(piece_index)
         {
-            Some(PieceStatus::PartiallyDownloaded { downloaded_bytes }) => Ok(*downloaded_bytes),
-            Some(PieceStatus::MissingPiece) => Ok(0),
+            Some(PieceStatus::PartiallyDownloaded { downloaded_bytes , was_requested: _ }) => Ok(*downloaded_bytes),
+            Some(PieceStatus::MissingPiece{ was_requested: false}) => Ok(0),
             _ => Err(TorrentStatusError::CalculatingBeginningByteIndex(
                 "[InteractionHandlerError] Invalid piece index given in order to calculate beggining byte index."
                     .to_string(),
@@ -214,6 +239,53 @@ impl TorrentStatus {
             Ok(remaining_bytes)
         } else {
             Ok(BLOCK_BYTES)
+        }
+    }
+
+    pub fn all_pieces_left(&self) -> bool {
+        self.pieces_availability
+            .iter()
+            .any(|piece_status| *piece_status == PieceStatus::ValidAndAvailablePiece)
+    }
+
+    pub fn all_pieces_completed(&self) -> bool {
+        self.pieces_availability
+            .iter()
+            .all(|piece| *piece == PieceStatus::ValidAndAvailablePiece)
+    }
+
+    pub fn set_piece_as_requested(&mut self, piece_index: usize) -> Result<(), TorrentStatusError> {
+        if let Some(piece_status) = self.pieces_availability.get_mut(piece_index) {
+            match piece_status {
+                PieceStatus::MissingPiece { was_requested } => {
+                    *was_requested = true;
+                    Ok(())
+                }
+                PieceStatus::PartiallyDownloaded { was_requested, .. } => {
+                    *was_requested = true;
+                    Ok(())
+                }
+                _ =>  Err(TorrentStatusError::UpdatingPieceStatus("[TorrentStatusError] A valid and available piece cannot be setting as requested.".to_string())),
+            }
+        } else {
+            Err(TorrentStatusError::UpdatingPieceStatus(
+                "[TorrentStatusError] The given piece index does not match with a piece."
+                    .to_string(),
+            ))
+        }
+    }
+
+    pub fn set_all_pieces_as_not_requested(&mut self) {
+        for piece_status in self.pieces_availability.iter_mut() {
+            match piece_status {
+                PieceStatus::MissingPiece { was_requested } => {
+                    *was_requested = false;
+                }
+                PieceStatus::PartiallyDownloaded { was_requested, .. } => {
+                    *was_requested = false;
+                }
+                _ => (),
+            }
         }
     }
 }
@@ -252,7 +324,14 @@ mod test_torrent_status {
                 downloaded: 0,
                 left: 40000,
                 event: StateOfDownload::Started,
-                pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
+                pieces_availability: vec![
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                ],
             };
             let server_peer_data = PeerDataForP2PCommunication {
                 peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
@@ -288,12 +367,21 @@ mod test_torrent_status {
                 downloaded: 0,
                 left: 16,
                 event: StateOfDownload::Started,
-                pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
+                pieces_availability: vec![
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                ],
             };
             let server_peer_data = PeerDataForP2PCommunication {
                 peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
                 pieces_availability: vec![
-                    PieceStatus::MissingPiece,
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
                     PieceStatus::ValidAndAvailablePiece,
                 ],
                 am_interested: false,
@@ -324,11 +412,25 @@ mod test_torrent_status {
                 downloaded: 0,
                 left: 16,
                 event: StateOfDownload::Started,
-                pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
+                pieces_availability: vec![
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                ],
             };
             let server_peer_data = PeerDataForP2PCommunication {
                 peer_id: DEFAULT_SERVER_PEER_ID.bytes().collect(),
-                pieces_availability: vec![PieceStatus::MissingPiece, PieceStatus::MissingPiece],
+                pieces_availability: vec![
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                ],
                 am_interested: false,
                 am_choking: true,
                 peer_choking: true,

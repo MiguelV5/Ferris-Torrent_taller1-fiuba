@@ -98,7 +98,7 @@ fn has_the_correct_number_of_bytes(
 /// Tener en cuenta que el slice de bytes esperado debe estar ordenado a modo big endian.
 ///
 fn decode_bitfield_p2p_message(bytes: &[u8]) -> P2PMessage {
-    let mut bitfield: Vec<PieceStatus> = Vec::with_capacity(bytes.len() * NUM_BITS_ON_A_BYTE); //cte
+    let mut bitfield: Vec<PieceStatus> = Vec::with_capacity(bytes.len() * NUM_BITS_ON_A_BYTE);
 
     for (i, value) in bytes.iter().enumerate() {
         let mut byte = *value as i8;
@@ -109,7 +109,12 @@ fn decode_bitfield_p2p_message(bytes: &[u8]) -> P2PMessage {
                     PieceStatus::ValidAndAvailablePiece,
                 )
             } else {
-                bitfield.insert(i * NUM_BITS_ON_A_BYTE + j, PieceStatus::MissingPiece)
+                bitfield.insert(
+                    i * NUM_BITS_ON_A_BYTE + j,
+                    PieceStatus::MissingPiece {
+                        was_requested: false,
+                    },
+                )
             }
             byte <<= 1;
         }
@@ -376,13 +381,27 @@ mod tests_p2p_decoder {
             assert_eq!(
                 P2PMessage::Bitfield {
                     bitfield: vec![
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
                         PieceStatus::ValidAndAvailablePiece
                     ]
                 },
@@ -396,28 +415,68 @@ mod tests_p2p_decoder {
             assert_eq!(
                 P2PMessage::Bitfield {
                     bitfield: vec![
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
                         PieceStatus::ValidAndAvailablePiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
                         PieceStatus::ValidAndAvailablePiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
                         PieceStatus::ValidAndAvailablePiece,
                         PieceStatus::ValidAndAvailablePiece
                     ]
@@ -514,12 +573,24 @@ mod tests_p2p_decoder {
             assert_eq!(
                 Ok(P2PMessage::Bitfield {
                     bitfield: vec![
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
-                        PieceStatus::MissingPiece,
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
+                        PieceStatus::MissingPiece {
+                            was_requested: false
+                        },
                         PieceStatus::ValidAndAvailablePiece,
                         PieceStatus::ValidAndAvailablePiece,
                     ]
