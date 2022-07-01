@@ -3,7 +3,7 @@ window {
 }
 
 stack.stack_main {
-	background-image: linear-gradient(-225deg, #1c0952 0%, #2f1a7c 52%, #0c4872 100%);
+  background-image: linear-gradient(-225deg, #1c0952 0%, #2f1a7c 52%, #0c4872 100%);
 }
 
 
@@ -21,13 +21,13 @@ label {
 }
 
 button {
-  border:2px solid rgba(0, 3, 39, 0.788);
+  border: 2px solid rgba(0, 3, 39, 0.788);
 }
 
 
 button:hover {
   border-color: rgba(224, 219, 226, 0.658);
-  transition:.4s;
+  transition: .4s;
 }
 
 button:active {

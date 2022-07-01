@@ -25,13 +25,16 @@ use crate::torrent::{
     data::config_file_data::ConfigFileData,
     data::torrent_status::TorrentStatus,
     entry_files_management,
-    local_peer::generate_peer_id,
+    local_peer_communicator::generate_peer_id,
+    logger::Logger,
+    user_interface::builder_app,
 };
-
+use gtk::prelude::ApplicationExtManual;
 use log::{debug, info, trace};
 use std::{
     error::Error,
     sync::{Arc, RwLock},
+    thread,
 };
 
 /// Funcion principal de ejecución del programa.
@@ -63,6 +66,17 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let tracker_response = communicate_with_tracker(&torrent_file, &config_data, peer_id.clone())?;
     info!("Comunicacion con el tracker exitosa");
 
+    let logger = Logger::new(
+        config_data.get_log_path(),
+        torrent_file.get_torrent_representative_name(),
+    )?;
+    let (logger_sender, logger_handle) = logger.init_logger()?;
+
+    //let empty_vec: Vec<&str> = vec![];
+    let (_application, ui_sender) = builder_app::build_app();
+
+    //application.run_with_args(&vec);
+
     info!("Inicio de comunicacion con peers.");
     peers_comunication::handler::handle_general_interaction_with_peers(
         torrent_file,
@@ -71,8 +85,14 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         &config_data,
         peer_id,
         shut_down,
+        logger_sender,
+        ui_sender,
     )?;
     info!("Se descargó exitosamente una pieza.");
+
+    logger_handle
+        .join()
+        .expect("No se pudo joinear el channel del logger"); //falta cambiar el error este
 
     Ok(())
 }

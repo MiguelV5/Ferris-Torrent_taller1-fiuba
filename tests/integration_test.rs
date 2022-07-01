@@ -13,7 +13,7 @@
 //     },
 //     local_peer::{
 //         generate_peer_id, InteractionHandlerError, InteractionHandlerErrorKind,
-//         InteractionHandlerStatus, LocalPeer, PeerRole,
+//         InteractionHandlerStatus, LocalPeerCommunicator, PeerRole,
 //     },
 //     parsers::{
 //         p2p,
@@ -927,7 +927,7 @@
 //     let peer_id = generate_peer_id();
 
 //     //INICIO LA COMUNICACION DEL LADO DEL CLIENTE
-//     let local_peer = LocalPeer::start_communication_as_client(
+//     let local_peer = LocalPeerCommunicator::start_communication_as_client(
 //         &torrent_file_data,
 //         &tracker_response_data,
 //         0,
@@ -980,7 +980,7 @@
 //     let peer_id = generate_peer_id();
 
 //     //INICIO LA COMUNICACION DEL LADO DEL CLIENTE
-//     let mut client_peer = LocalPeer::start_communication_as_client(
+//     let mut client_peer = LocalPeerCommunicator::start_communication_as_client(
 //         &torrent_file_data,
 //         &tracker_response_data,
 //         0,
@@ -1059,7 +1059,7 @@
 
 //     let peer_id = generate_peer_id();
 
-//     let mut client_peer = LocalPeer::start_communication_as_client(
+//     let mut client_peer = LocalPeerCommunicator::start_communication_as_client(
 //         &torrent_file_data,
 //         &tracker_response_data,
 //         0,
@@ -1196,7 +1196,7 @@
 
 // //     let peer_id = generate_peer_id();
 
-// //     let mut client_peer = LocalPeer::start_communication(
+// //     let mut client_peer = LocalPeerCommunicator::start_communication(
 // //         &torrent_file_data,
 // //         &tracker_response_data,
 // //         0,

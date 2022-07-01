@@ -11,12 +11,12 @@ use gtk::{
     Application, ApplicationWindow, CssProvider, StyleContext, STYLE_PROVIDER_PRIORITY_APPLICATION,
 };
 
-pub fn build_app() -> (Application, Sender<Message>) {
+pub fn build_app() -> (Application, Sender<MessageUI>) {
     let app = Application::builder().application_id(ID_APP).build();
 
     let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
 
-    let receiver: RefCell<Option<Receiver<Message>>> = RefCell::new(Some(receiver));
+    let receiver: RefCell<Option<Receiver<MessageUI>>> = RefCell::new(Some(receiver));
 
     app.connect_startup(move |app| {
         let provider = CssProvider::new();
@@ -34,7 +34,7 @@ pub fn build_app() -> (Application, Sender<Message>) {
     (app, sender)
 }
 
-fn build_ui(app: &Application, receiver: Receiver<Message>) {
+fn build_ui(app: &Application, receiver: Receiver<MessageUI>) {
     let mut builder_main = MainWindow::new();
     let boxed_main = builder_main.get_box_main();
 
@@ -52,8 +52,8 @@ fn build_ui(app: &Application, receiver: Receiver<Message>) {
     receiver.attach(None, move |msg| {
         match msg {
             //Mensajes de torrents
-            Message::AddTorrent { torrent_name } => builder_main.add_torrent(torrent_name),
-            Message::UpdateTorrentData {
+            MessageUI::AddTorrent { torrent_name } => builder_main.add_torrent(torrent_name),
+            MessageUI::UpdateTorrentData {
                 torrent_name,
                 tracker_url,
                 info_hash,
@@ -70,23 +70,23 @@ fn build_ui(app: &Application, receiver: Receiver<Message>) {
                 builder_main.change_peers_leechers(torrent_name.clone(), peers, leechers);
                 builder_main.change_single_multiple(torrent_name, type_torrent);
             }
-            Message::UpdatePiecesDownloaded {
+            MessageUI::UpdatePiecesDownloaded {
                 torrent_name,
                 pieces_downloaded,
             } => builder_main.change_pieces_downloaded(torrent_name, pieces_downloaded),
-            Message::UpdateActiveConnections {
+            MessageUI::UpdateActiveConnections {
                 torrent_name,
                 type_of_change,
             } => builder_main.change_active_connections(torrent_name, type_of_change),
-            Message::UpdatePorcentageDownloaded {
+            MessageUI::UpdatePorcentageDownloaded {
                 torrent_name,
                 porcentage_downloaded,
             } => builder_main.change_progress_bar(torrent_name, porcentage_downloaded),
 
             //Mensajes de peers
-            Message::AddPeer { peer_name } => builder_main.add_peer(peer_name),
-            Message::RemovePeer { peer_name } => builder_main.remove_peer(peer_name),
-            Message::UpdatePeerData {
+            MessageUI::AddPeer { peer_name } => builder_main.add_peer(peer_name),
+            MessageUI::RemovePeer { peer_name } => builder_main.remove_peer(peer_name),
+            MessageUI::UpdatePeerData {
                 peer_name,
                 peer_id,
                 ip,
@@ -96,23 +96,23 @@ fn build_ui(app: &Application, receiver: Receiver<Message>) {
                 builder_main.change_ip(peer_name.clone(), ip);
                 builder_main.change_port(peer_name, port);
             }
-            Message::UpdateDownload {
+            MessageUI::UpdateDownload {
                 peer_name,
                 download,
             } => builder_main.change_download(peer_name, download),
-            Message::UpdateUpload { peer_name, upload } => {
+            MessageUI::UpdateUpload { peer_name, upload } => {
                 builder_main.change_upload(peer_name, upload)
             }
-            Message::UpdatePeerState {
+            MessageUI::UpdatePeerState {
                 peer_name,
                 state_peer,
             } => builder_main.change_state_peer(peer_name, state_peer),
-            Message::UpdateClientState {
+            MessageUI::UpdateClientState {
                 peer_name,
                 state_client,
             } => builder_main.change_state_client(peer_name, state_client),
 
-            Message::Shutdown {} => window_clone.close(),
+            MessageUI::Shutdown {} => window_clone.close(),
         }
         glib::Continue(true)
     });

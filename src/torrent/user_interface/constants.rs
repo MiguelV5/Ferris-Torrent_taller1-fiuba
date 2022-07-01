@@ -80,7 +80,7 @@ pub enum State {
     NotInterested,
 }
 
-pub enum Message {
+pub enum MessageUI {
     AddTorrent {
         torrent_name: String,
     },

@@ -18,8 +18,11 @@ use crate::torrent::{
     },
 };
 extern crate rand;
+use super::user_interface::constants::MessageUI;
+use gtk::glib::Sender as UiSender;
 use log::{debug, info};
 use rand::{distributions::Alphanumeric, Rng};
+use std::sync::mpsc::Sender as LoggerSender;
 use std::{
     error::Error,
     fmt,
@@ -40,11 +43,13 @@ pub const SECS_CONNECT_TIMEOUT: u64 = 10;
 
 #[derive(Debug)]
 /// Struct que tiene por comportamiento todo el manejo general de actualizacion importante de datos, almacenamiento de los mismos y ejecución de metodos importantes para la comunicación con peers durante la ejecución del programa a modo de leecher.
-pub struct LocalPeer {
+pub struct LocalPeerCommunicator {
     pub peer_id: Vec<u8>,
     pub stream: TcpStream,
     pub external_peer_data: PeerDataForP2PCommunication,
     pub role: PeerRole,
+    pub logger_sender: LoggerSender<String>,
+    pub logger_ui: UiSender<MessageUI>,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -100,6 +105,7 @@ pub enum InteractionHandlerError {
     JoinHandle(String),
     ReadingShutDownField(String),
     UpdatingWasRequestedField(String),
+    LogError(String),
 }
 
 impl fmt::Display for InteractionHandlerError {
@@ -288,7 +294,7 @@ fn is_shut_down_activated(
 
 // --------------------------------------------------
 
-impl LocalPeer {
+impl LocalPeerCommunicator {
     // FUNCIONES PRINCIPALES
 
     ///
@@ -298,6 +304,8 @@ impl LocalPeer {
         tracker_response_data: &TrackerResponseData,
         tracker_response_peer_index: usize,
         peer_id: Vec<u8>,
+        logger_sender: LoggerSender<String>,
+        logger_ui: UiSender<MessageUI>,
     ) -> Result<Self, InteractionHandlerErrorKind> {
         let mut local_peer_stream =
             open_connection_with_peer(tracker_response_data, tracker_response_peer_index)?;
@@ -327,11 +335,13 @@ impl LocalPeer {
             tracker_response_peer_index,
         )?;
 
-        Ok(LocalPeer {
+        Ok(LocalPeerCommunicator {
             peer_id,
             stream: local_peer_stream,
             external_peer_data,
             role: PeerRole::Client,
+            logger_sender,
+            logger_ui,
         })
     }
 
@@ -341,6 +351,8 @@ impl LocalPeer {
         torrent_file_data: &TorrentFileData,
         peer_id: Vec<u8>,
         mut stream: TcpStream,
+        logger_sender: LoggerSender<String>,
+        logger_ui: UiSender<MessageUI>,
     ) -> Result<Self, InteractionHandlerErrorKind> {
         let received_handshake = msg_receiver::receive_handshake(&mut stream).map_err(|error| {
             InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::ReceivingHanshake(
@@ -359,11 +371,13 @@ impl LocalPeer {
         })?;
         info!("Mensaje enviado: Handshake.");
 
-        Ok(LocalPeer {
+        Ok(LocalPeerCommunicator {
             peer_id,
             stream,
             external_peer_data,
             role: PeerRole::Client,
+            logger_sender,
+            logger_ui,
         })
     }
 
@@ -625,6 +639,13 @@ impl LocalPeer {
                     )
                 },
             )?;
+            self.logger_sender
+                .send(format!("Se completó la pieza número {}. [Ok]", piece_index))
+                .map_err(|err| {
+                    InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::LogError(
+                        format!("{}", err),
+                    ))
+                })?;
         }
         Ok(())
     }
@@ -1110,7 +1131,7 @@ impl LocalPeer {
 //             TrackerResponseData,
 //             Arc<RwLock<TorrentStatus>>,
 //             TorrentFileData,
-//             LocalPeer,
+//             LocalPeerCommunicator,
 //         ),
 //         Box<dyn Error>,
 //     > {
@@ -1160,7 +1181,7 @@ impl LocalPeer {
 //             peer_choking: true,
 //             peer_interested: false,
 //         };
-//         let local_peer = LocalPeer {
+//         let local_peer = LocalPeerCommunicator {
 //             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
 //             stream,
 //             external_peer_data: server_peer_data,
@@ -1179,7 +1200,7 @@ impl LocalPeer {
 //             TrackerResponseData,
 //             Arc<RwLock<TorrentStatus>>,
 //             TorrentFileData,
-//             LocalPeer,
+//             LocalPeerCommunicator,
 //         ),
 //         Box<dyn Error>,
 //     > {
@@ -1237,7 +1258,7 @@ impl LocalPeer {
 //             peer_choking: true,
 //             peer_interested: false,
 //         };
-//         let local_peer = LocalPeer {
+//         let local_peer = LocalPeerCommunicator {
 //             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
 //             stream,
 //             external_peer_data: server_peer_data,
@@ -1256,7 +1277,7 @@ impl LocalPeer {
 //             TrackerResponseData,
 //             Arc<RwLock<TorrentStatus>>,
 //             TorrentFileData,
-//             LocalPeer,
+//             LocalPeerCommunicator,
 //         ),
 //         Box<dyn Error>,
 //     > {
@@ -1305,7 +1326,7 @@ impl LocalPeer {
 //             peer_choking: true,
 //             peer_interested: false,
 //         };
-//         let local_peer = LocalPeer {
+//         let local_peer = LocalPeerCommunicator {
 //             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
 //             stream,
 //             external_peer_data: server_peer_data,
@@ -1322,7 +1343,7 @@ impl LocalPeer {
 //             TrackerResponseData,
 //             Arc<RwLock<TorrentStatus>>,
 //             TorrentFileData,
-//             LocalPeer,
+//             LocalPeerCommunicator,
 //         ),
 //         Box<dyn Error>,
 //     > {
@@ -1375,7 +1396,7 @@ impl LocalPeer {
 //             peer_choking: true,
 //             peer_interested: false,
 //         };
-//         let local_peer = LocalPeer {
+//         let local_peer = LocalPeerCommunicator {
 //             peer_id: DEFAULT_CLIENT_PEER_ID.bytes().collect(),
 //             stream,
 //             external_peer_data: server_peer_data,

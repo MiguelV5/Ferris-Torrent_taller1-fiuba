@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     fmt,
     fs::{File, OpenOptions},
     io::Write,
@@ -27,6 +28,8 @@ impl fmt::Display for LogError {
         write!(f, "\n    {:#?}\n", self)
     }
 }
+
+impl Error for LogError {}
 
 impl Logger {
     pub fn new(log_path_dir: String, torrent_name: String) -> Result<Logger, LogError> {
