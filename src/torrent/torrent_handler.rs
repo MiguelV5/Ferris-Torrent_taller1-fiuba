@@ -10,7 +10,7 @@ use crate::torrent::{
     local_peer_communicator::generate_peer_id,
     logger::Logger,
 };
-use crate::torrent::{entry_files_management, logger, pieces_handler};
+use crate::torrent::{entry_files_management, logger};
 use core::fmt;
 use gtk::glib::Sender as UiSender;
 use log::{debug, info, trace};
