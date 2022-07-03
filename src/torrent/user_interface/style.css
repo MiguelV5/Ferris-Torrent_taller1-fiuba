@@ -1,36 +1,37 @@
 window {
-  background-color: rgb(43, 4, 53);
+  background-color: rgb(255, 255, 255);
 }
 
 stack.stack_main {
-  background-image: linear-gradient(-225deg, #1c0952 0%, #2f1a7c 52%, #0c4872 100%);
+  background-image: linear-gradient(-225deg, #ffffff 0%, #ffffff 52%, #ffffff 100%);
+  text-decoration-color: #0000;
 }
 
 
 stack.stack_info {
-  background-image: linear-gradient(60deg, #29323c 0%, #485563 100%);
+  background-image: linear-gradient(60deg, #ffa172 0%, #ffa172 100%);
   border-style: outset;
   border-width: 5px;
-  border-color: rgb(34, 33, 33);
+  border-color: rgb(0, 0, 0);
+  outline-color: #431804;
 }
 
 label {
-  color: rgb(255, 255, 255);
+  color: rgb(23, 16, 16);
   border-color: rgb(37, 37, 37);
   font-weight: bold;
 }
 
 button {
-  border: 2px solid rgba(0, 3, 39, 0.788);
+  border: 2px solid rgba(39, 9, 0, 0.788);
 }
 
-
 button:hover {
-  border-color: rgba(224, 219, 226, 0.658);
+  border-color: rgba(226, 221, 219, 0.658);
   transition: .4s;
 }
 
 button:active {
-  background-color: rgb(10, 1, 14);
+  background-color: rgb(14, 5, 1);
   color: rgb(39, 36, 36);
 }

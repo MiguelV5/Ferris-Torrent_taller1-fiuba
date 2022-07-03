@@ -1,6 +1,7 @@
 pub mod builder_app;
 pub mod constants;
 pub mod main_window;
+pub mod ui_handler;
 
 //[Necesario para que corra]
 //use gtk::prelude::ApplicationExtManual;

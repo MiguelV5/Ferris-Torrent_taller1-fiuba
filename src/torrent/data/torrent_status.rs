@@ -20,6 +20,7 @@ pub enum TorrentStatusError {
     UpdatingPieceStatus(String),
     CalculatingBeginningByteIndex(String),
     CalculatingAmountOfBytes(String),
+    CalculatingDownloadedPorcentage(String),
 }
 
 impl fmt::Display for TorrentStatusError {
@@ -80,6 +81,36 @@ impl TorrentStatus {
             event: StateOfDownload::Started,
             pieces_availability,
         }
+    }
+
+    pub fn get_downloaded_bytes(&self) -> u64 {
+        self.downloaded
+    }
+
+    pub fn get_uploaded_bytes(&self) -> u64 {
+        self.uploaded
+    }
+
+    pub fn get_porcentage_downloaded(&self) -> Result<f64, TorrentStatusError> {
+        let left = self.left;
+        let downloaded = u32::try_from(self.downloaded).map_err(|err| {
+            TorrentStatusError::CalculatingDownloadedPorcentage(format!("{}", err))
+        })?;
+        let total = u32::try_from(left + self.downloaded).map_err(|err| {
+            TorrentStatusError::CalculatingDownloadedPorcentage(format!("{}", err))
+        })?;
+
+        let downloaded = f64::from(downloaded);
+        let total = f64::from(total);
+
+        Ok(downloaded / total)
+    }
+
+    pub fn get_amount_of_downloaded_pieces(&self) -> u64 {
+        self.pieces_availability
+            .iter()
+            .filter(|&piece_status| *piece_status == PieceStatus::ValidAndAvailablePiece)
+            .count() as u64
     }
 
     /// Funcion que indica si una pieza de tal indice está faltante por descargar

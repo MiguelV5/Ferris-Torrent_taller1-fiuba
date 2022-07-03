@@ -18,24 +18,21 @@
 pub mod torrent;
 
 use crate::torrent::{
-    client::{
-        medatada_analyzer::create_torrent, peers_comunication,
-        tracker_comunication::http_handler::communicate_with_tracker,
-    },
-    data::config_file_data::ConfigFileData,
-    data::torrent_status::TorrentStatus,
-    entry_files_management,
-    local_peer_communicator::generate_peer_id,
-    logger::Logger,
+    torrent_handler::{self},
     user_interface::builder_app,
 };
 use gtk::prelude::ApplicationExtManual;
-use log::{debug, info, trace};
+use log::info;
 use std::{
     error::Error,
     sync::{Arc, RwLock},
-    thread,
 };
+
+fn set_global_shut_down(global_shut_down: Arc<RwLock<bool>>) -> Result<(), Box<dyn Error>> {
+    let mut global_shut_down = global_shut_down.write().map_err(|err| format!("{}", err))?;
+    *global_shut_down = true;
+    Ok(())
+}
 
 /// Funcion principal de ejecución del programa.
 /// (En su version actual) Realiza todo lo necesario para descargar una pieza válida a partir de un archivo .torrent dado por consola.
@@ -44,55 +41,27 @@ use std::{
 pub fn run() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
     info!("Iniciando el programa");
-    let shut_down = Arc::new(RwLock::new(false));
 
-    let config_data = ConfigFileData::new("config.txt")?;
-    info!("Archivo de configuración leido y parseado correctamente");
+    let (application, ui_sender) = builder_app::build_app();
+    let global_shut_down = Arc::new(RwLock::new(false));
 
-    let files_list = entry_files_management::create_list_files()?;
-    let file_path = files_list[0].clone();
-    debug!("Archivo ingresado: {}", file_path);
-    info!("Archivo ingresado con exito");
+    let (torrent_handler_1, torrent_handler_2) =
+        torrent_handler::handle_all_torrents(ui_sender, &global_shut_down)?;
 
-    let torrent_file = create_torrent(&file_path)?;
-    trace!("Almacenada y parseada información de metadata");
-    let torrent_size = torrent_file.get_total_length() as u64;
-    let torrent_status = TorrentStatus::new(torrent_size, torrent_file.total_amount_of_pieces);
-    trace!("Creado estado inicial del torrent");
+    let empty_vec: Vec<&str> = vec![];
+    application.run_with_args(&empty_vec);
 
-    let peer_id = generate_peer_id();
+    set_global_shut_down(global_shut_down)?;
 
-    info!("Iniciando comunicacion con tracker");
-    let tracker_response = communicate_with_tracker(&torrent_file, &config_data, peer_id.clone())?;
-    info!("Comunicacion con el tracker exitosa");
-
-    let logger = Logger::new(
-        config_data.get_log_path(),
-        torrent_file.get_torrent_representative_name(),
-    )?;
-    let (logger_sender, logger_handle) = logger.init_logger()?;
-
-    //let empty_vec: Vec<&str> = vec![];
-    let (_application, ui_sender) = builder_app::build_app();
-
-    //application.run_with_args(&vec);
-
-    info!("Inicio de comunicacion con peers.");
-    peers_comunication::handler::handle_general_interaction_with_peers(
-        torrent_file,
-        tracker_response,
-        torrent_status,
-        &config_data,
-        peer_id,
-        shut_down,
-        logger_sender,
-        ui_sender,
-    )?;
-    info!("Se descargó exitosamente una pieza.");
-
-    logger_handle
+    let torrent_result_1 = torrent_handler_1
         .join()
-        .expect("No se pudo joinear el channel del logger"); //falta cambiar el error este
+        .map_err(|_| ("[TorrentHandlerError] Join handle error".to_string()));
+    let torrent_result_2 = torrent_handler_2
+        .join()
+        .map_err(|_| ("[TorrentHandlerError] Join handle error".to_string()));
+
+    torrent_result_1??;
+    torrent_result_2??;
 
     Ok(())
 }

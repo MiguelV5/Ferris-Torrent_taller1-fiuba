@@ -31,6 +31,15 @@ impl fmt::Display for LogError {
 
 impl Error for LogError {}
 
+pub fn close_logger(
+    logger_handler: JoinHandle<()>,
+    logger_sender: Sender<String>,
+) -> Result<(), Box<dyn Error>> {
+    drop(logger_sender);
+    logger_handler.join().map_err(|_| LogError::CanNotJoin)?;
+    Ok(())
+}
+
 impl Logger {
     pub fn new(log_path_dir: String, torrent_name: String) -> Result<Logger, LogError> {
         let log_path = format!("{}/{}-logs.txt", log_path_dir, torrent_name);

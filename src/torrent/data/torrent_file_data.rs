@@ -369,6 +369,7 @@ impl TorrentFileData {
         self.total_amount_of_pieces
     }
 
+
     ///Funcion que dado el numero de pieza devuelve su encriptacion en SHA-1
     ///
     pub fn get_piece_sha1(&self, piece_index: usize) -> Vec<u8> {

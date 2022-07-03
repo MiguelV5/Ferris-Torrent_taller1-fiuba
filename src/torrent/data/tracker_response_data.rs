@@ -211,6 +211,14 @@ impl TrackerResponseData {
     pub fn get_total_amount_peers(&self) -> usize {
         self.peers.len()
     }
+
+    pub fn get_total_amount_leechers(&self) -> u64 {
+        self.incomplete
+    }
+
+    pub fn get_total_amount_seeders(&self) -> u64 {
+        self.complete
+    }
 }
 
 #[cfg(test)]

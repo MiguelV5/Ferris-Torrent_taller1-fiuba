@@ -11,6 +11,7 @@ use crate::torrent::parsers::p2p::message::PieceStatus;
 #[derive(PartialEq, Debug, Clone)]
 pub enum PeerDataForP2PCommunicationError {
     InvalidPieceIndexAtBitfield(String),
+    CreatingPeerName(String),
 }
 
 impl fmt::Display for PeerDataForP2PCommunicationError {
@@ -74,5 +75,17 @@ impl PeerDataForP2PCommunication {
 
     pub fn update_pieces_availability(&mut self, new_pieces_availability: Vec<PieceStatus>) {
         self.pieces_availability = new_pieces_availability;
+    }
+
+    pub fn get_peer_name(&self) -> Result<String, PeerDataForP2PCommunicationError> {
+        let peer_id = self.peer_id.clone();
+        let peer_name = peer_id[1..7].to_vec();
+
+        String::from_utf8(peer_name)
+            .map_err(|err| PeerDataForP2PCommunicationError::CreatingPeerName(format!("{}", err)))
+    }
+
+    pub fn get_peer_id(&self) -> Vec<u8> {
+        self.peer_id.clone()
     }
 }

@@ -59,7 +59,7 @@ fn build_ui(app: &Application, receiver: Receiver<MessageUI>) {
                 info_hash,
                 total_size,
                 cant_pieces,
-                peers,
+                seeders: peers,
                 leechers,
                 type_torrent,
             } => {
@@ -112,7 +112,7 @@ fn build_ui(app: &Application, receiver: Receiver<MessageUI>) {
                 state_client,
             } => builder_main.change_state_client(peer_name, state_client),
 
-            MessageUI::Shutdown {} => window_clone.close(),
+            MessageUI::Shutdown => window_clone.close(),
         }
         glib::Continue(true)
     });

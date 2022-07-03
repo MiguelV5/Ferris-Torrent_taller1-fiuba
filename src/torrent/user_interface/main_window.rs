@@ -78,7 +78,7 @@ struct InfoBox {
     labels: HashMap<String, gtk::Label>,
     progress_bar: gtk::ProgressBar,
     image_ferris: gtk::Image,
-    active_connections: u32,
+    active_connections: u64,
 }
 
 impl InfoBox {
@@ -104,11 +104,11 @@ impl InfoBox {
         self.init_info_hash(String::from(INCOGNITO));
         self.init_total_size(ZERO);
         self.init_cant_pieces(ZERO);
-        self.init_peers(ZERO as u32, ZERO as u32);
+        self.init_peers(ZERO as u64, ZERO as u64);
         self.init_single_multiple(String::from(INCOGNITO));
         self.init_pieces_downloaded(ZERO);
         self.init_active_connections();
-        self.init_progress_bar(ZERO as f64);
+        self.init_progress_bar(ZERO as u64);
     }
 
     fn init_tracker(&mut self, tracker: String) {
@@ -159,10 +159,10 @@ impl InfoBox {
         self.labels.insert(cant_pieces_id, label_cant_pieces);
     }
 
-    fn init_peers(&mut self, peers: u32, leechers: u32) {
+    fn init_peers(&mut self, peers: u64, leechers: u64) {
         let peers_id = String::from(PEERS_LEECHERS_ID);
 
-        let mut peers_label = String::from(PEERS_LABEL);
+        let mut peers_label = String::from(SEEDERS_LABEL);
         peers_label.push_str(peers.to_string().as_str());
         peers_label.push_str(LEECHERS_LABEL);
         peers_label.push_str(leechers.to_string().as_str());
@@ -211,8 +211,8 @@ impl InfoBox {
             .insert(active_connections_id, label_active_connections);
     }
 
-    fn init_progress_bar(&mut self, progress: f64) {
-        self.progress_bar.set_fraction(progress);
+    fn init_progress_bar(&mut self, progress: u64) {
+        self.progress_bar.set_fraction(progress as f64);
         let dummy = create_default_label(String::new());
         self.image_ferris.set_from_file(Some(IMAGE_FERRIS));
         self.info_box.append(&dummy);
@@ -269,12 +269,12 @@ impl InfoBox {
         }
     }
 
-    fn change_peers_leechers(&mut self, peers: u32, leechers: u32) {
+    fn change_peers_leechers(&mut self, seeders: u64, leechers: u64) {
         let peers_leechers_label = self.labels.get(PEERS_LEECHERS_ID);
         match peers_leechers_label {
             Some(label) => {
-                let mut new_peers_leechers = String::from(PEERS_LABEL);
-                new_peers_leechers.push_str(peers.to_string().as_str());
+                let mut new_peers_leechers = String::from(SEEDERS_LABEL);
+                new_peers_leechers.push_str(seeders.to_string().as_str());
                 new_peers_leechers.push_str(LEECHERS_LABEL);
                 new_peers_leechers.push_str(leechers.to_string().as_str());
                 label.set_label(&new_peers_leechers)
@@ -330,6 +330,7 @@ impl InfoBox {
         if progress == ONE {
             self.image_ferris.set_from_file(Some(IMAGE_FERRIS3))
         }
+
         self.progress_bar.set_fraction(progress);
     }
 
@@ -337,8 +338,8 @@ impl InfoBox {
         self.init_peer_id(String::from(INCOGNITO));
         self.init_ip(String::from(INCOGNITO));
         self.init_port(ZERO);
-        self.init_download(ZERO as f64);
-        self.init_upload(ZERO as f64);
+        self.init_download(ZERO as u64);
+        self.init_upload(ZERO as u64);
         self.init_state_peer(String::from(INCOGNITO));
         self.init_state_client(String::from(INCOGNITO));
     }
@@ -379,7 +380,7 @@ impl InfoBox {
         self.labels.insert(port_id, label_port);
     }
 
-    fn init_download(&mut self, download: f64) {
+    fn init_download(&mut self, download: u64) {
         let download_id = String::from(DOWNLOAD_ID);
 
         let mut download_data = String::from(DOWNLOAD_LABEL);
@@ -391,7 +392,7 @@ impl InfoBox {
         self.labels.insert(download_id, label_download);
     }
 
-    fn init_upload(&mut self, upload: f64) {
+    fn init_upload(&mut self, upload: u64) {
         let upload_id = String::from(UPLOAD_ID);
 
         let mut upload_data = String::from(UPLOAD_LABEL);
@@ -473,6 +474,7 @@ impl InfoBox {
         let download_label = self.labels.get(DOWNLOAD_ID);
         match download_label {
             Some(label) => {
+                let download = (download * f64::from(100)).round() / f64::from(100);
                 let mut new_download = String::from(DOWNLOAD_LABEL);
                 new_download.push_str(download.to_string().as_str());
                 new_download.push_str(BYTESPERSEC);
@@ -486,6 +488,7 @@ impl InfoBox {
         let upload_label = self.labels.get(UPLOAD_ID);
         match upload_label {
             Some(label) => {
+                let upload = (upload * f64::from(100)).round() / f64::from(100);
                 let mut new_upload = String::from(UPLOAD_LABEL);
                 new_upload.push_str(upload.to_string().as_str());
                 new_upload.push_str(BYTESPERSEC);
@@ -497,16 +500,17 @@ impl InfoBox {
 
     fn change_state_peer(&mut self, state_peer: State) {
         let state = match state_peer {
-            State::Choke => CHOKE,
-            State::Unchoked => UNCHOKED,
-            State::Interested => INTERESTED,
-            State::NotInterested => NOT_INTERESTED,
+            State::ChokeInterested => format!("{} - ", CHOKE) + INTERESTED,
+            State::UnchokeInterested => format!("{} - ", UNCHOKE) + INTERESTED,
+            State::ChokeNotInterested => format!("{} - ", CHOKE) + NOT_INTERESTED,
+            State::UnchokeNotInterested => format!("{} - ", UNCHOKE) + NOT_INTERESTED,
         };
         let state_peer_label = self.labels.get(STATE_PEER_ID);
         match state_peer_label {
             Some(label) => {
                 let mut new_state_peer = String::from(STATE_PEER_LABEL);
-                new_state_peer.push_str(state);
+
+                new_state_peer.push_str(&state);
                 label.set_label(&new_state_peer)
             }
             None => (),
@@ -515,16 +519,17 @@ impl InfoBox {
 
     fn change_state_client(&mut self, state_client: State) {
         let state = match state_client {
-            State::Choke => CHOKE,
-            State::Unchoked => UNCHOKED,
-            State::Interested => INTERESTED,
-            State::NotInterested => NOT_INTERESTED,
+            State::ChokeInterested => format!("{} - ", CHOKE) + INTERESTED,
+            State::UnchokeInterested => format!("{} - ", UNCHOKE) + INTERESTED,
+            State::ChokeNotInterested => format!("{} - ", CHOKE) + NOT_INTERESTED,
+            State::UnchokeNotInterested => format!("{} - ", UNCHOKE) + NOT_INTERESTED,
         };
         let state_client_label = self.labels.get(STATE_CLIENT_ID);
         match state_client_label {
             Some(label) => {
                 let mut new_state_client = String::from(STATE_CLIENT_LABEL);
-                new_state_client.push_str(state);
+
+                new_state_client.push_str(&state);
                 label.set_label(&new_state_client)
             }
             None => (),
@@ -648,11 +653,11 @@ impl MainWindow {
         }
     }
 
-    pub fn change_peers_leechers(&mut self, torrent: String, peers: u32, leechers: u32) {
+    pub fn change_peers_leechers(&mut self, torrent: String, seeders: u64, leechers: u64) {
         let info_box = self.info_box_torrents.get_mut(&torrent);
         match info_box {
             Some(info_torrent) => {
-                info_torrent.change_peers_leechers(peers, leechers);
+                info_torrent.change_peers_leechers(seeders, leechers);
             }
             None => (),
         }

@@ -1,0 +1,8 @@
+[ERROR] Finalización de descarga de piezas en el torrent "ubuntu-22.04-desktop-amd64" debido al error: 
+    CommunicationWithPeers(
+    ConectingWithPeer(
+        "No peers left to connect.",
+    ),
+)
+
+[END] Finalización de descarga de piezas en el torrent "ubuntu-22.04-desktop-amd64"

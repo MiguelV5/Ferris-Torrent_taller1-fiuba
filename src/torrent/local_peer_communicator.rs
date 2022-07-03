@@ -16,20 +16,21 @@ use crate::torrent::{
         constants::PSTR_STRING_HANDSHAKE,
         message::{P2PMessage, PieceStatus},
     },
+    user_interface::ui_handler,
 };
 extern crate rand;
 use super::user_interface::constants::MessageUI;
 use gtk::glib::Sender as UiSender;
 use log::{debug, info};
 use rand::{distributions::Alphanumeric, Rng};
-use std::sync::mpsc::Sender as LoggerSender;
 use std::{
     error::Error,
     fmt,
-    net::TcpStream,
+    net::{SocketAddr, TcpStream},
     sync::{Arc, RwLock},
     time::Duration,
 };
+use std::{sync::mpsc::Sender as LoggerSender, time::SystemTime};
 
 //========================================================
 
@@ -49,7 +50,8 @@ pub struct LocalPeerCommunicator {
     pub external_peer_data: PeerDataForP2PCommunication,
     pub role: PeerRole,
     pub logger_sender: LoggerSender<String>,
-    pub logger_ui: UiSender<MessageUI>,
+    pub ui_sender: UiSender<MessageUI>,
+    pub time: SystemTime,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -106,6 +108,9 @@ pub enum InteractionHandlerError {
     ReadingShutDownField(String),
     UpdatingWasRequestedField(String),
     LogError(String),
+    UiError(String),
+    CalculatingTime(String),
+    PiecesHandler(String),
 }
 
 impl fmt::Display for InteractionHandlerError {
@@ -122,7 +127,8 @@ impl Error for InteractionHandlerError {}
 pub enum InteractionHandlerStatus {
     LookForAnotherPeer,
     FinishInteraction,
-    SecureShutDown,
+    SecureLocalShutDown,
+    SecureGlobalShutDown,
 }
 
 //========================================================
@@ -143,16 +149,19 @@ pub fn generate_peer_id() -> Vec<u8> {
 fn open_connection_with_peer(
     tracker_response_data: &TrackerResponseData,
     tracker_response_peer_index: usize,
-) -> Result<TcpStream, InteractionHandlerErrorKind> {
-    if let Some(peer_address) = tracker_response_data.get_peer_address(tracker_response_peer_index)
+) -> Result<(TcpStream, SocketAddr), InteractionHandlerErrorKind> {
+    if let Some(external_peer_address) =
+        tracker_response_data.get_peer_address(tracker_response_peer_index)
     {
-        let stream =
-            TcpStream::connect_timeout(&peer_address, Duration::from_secs(SECS_READ_TIMEOUT))
-                .map_err(|error| {
-                    InteractionHandlerErrorKind::Recoverable(
-                        InteractionHandlerError::ConectingWithPeer(format!("{}", error)),
-                    )
-                })?;
+        let stream = TcpStream::connect_timeout(
+            &external_peer_address,
+            Duration::from_secs(SECS_READ_TIMEOUT),
+        )
+        .map_err(|error| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::ConectingWithPeer(
+                format!("{}", error),
+            ))
+        })?;
 
         stream
             .set_read_timeout(Some(Duration::from_secs(SECS_READ_TIMEOUT)))
@@ -161,7 +170,7 @@ fn open_connection_with_peer(
                     InteractionHandlerError::ConectingWithPeer(format!("{}", err)),
                 )
             })?;
-        return Ok(stream);
+        return Ok((stream, external_peer_address));
     }
 
     Err(InteractionHandlerErrorKind::Unrecoverable(
@@ -281,15 +290,26 @@ fn log_info_msg(msg: &P2PMessage) {
     }
 }
 
-fn is_shut_down_activated(
-    shut_down: &Arc<RwLock<bool>>,
+fn is_local_shut_down_set(
+    local_shut_down: &Arc<RwLock<bool>>,
 ) -> Result<bool, InteractionHandlerErrorKind> {
-    let shut_down = shut_down.read().map_err(|error| {
+    let local_shut_down = local_shut_down.read().map_err(|error| {
         InteractionHandlerErrorKind::Unrecoverable(InteractionHandlerError::ReadingShutDownField(
             format!("{:?}", error),
         ))
     })?;
-    return Ok(*shut_down);
+    return Ok(*local_shut_down);
+}
+
+fn is_global_shut_down_set(
+    global_shut_down: &Arc<RwLock<bool>>,
+) -> Result<bool, InteractionHandlerErrorKind> {
+    let global_shut_down = global_shut_down.read().map_err(|error| {
+        InteractionHandlerErrorKind::Unrecoverable(InteractionHandlerError::ReadingShutDownField(
+            format!("{:?}", error),
+        ))
+    })?;
+    return Ok(*global_shut_down);
 }
 
 // --------------------------------------------------
@@ -305,9 +325,9 @@ impl LocalPeerCommunicator {
         tracker_response_peer_index: usize,
         peer_id: Vec<u8>,
         logger_sender: LoggerSender<String>,
-        logger_ui: UiSender<MessageUI>,
+        ui_sender: UiSender<MessageUI>,
     ) -> Result<Self, InteractionHandlerErrorKind> {
-        let mut local_peer_stream =
+        let (mut local_peer_stream, external_peer_addr) =
             open_connection_with_peer(tracker_response_data, tracker_response_peer_index)?;
         info!("El cliente se conecta con un peer exitosamente.");
 
@@ -335,13 +355,29 @@ impl LocalPeerCommunicator {
             tracker_response_peer_index,
         )?;
 
+        let time = SystemTime::now();
+
+        ui_handler::add_external_peer(
+            &ui_sender,
+            torrent_file_data,
+            &external_peer_data,
+            &external_peer_addr,
+        )
+        .map_err(|error| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                "{}",
+                error
+            )))
+        })?;
+
         Ok(LocalPeerCommunicator {
             peer_id,
             stream: local_peer_stream,
             external_peer_data,
             role: PeerRole::Client,
             logger_sender,
-            logger_ui,
+            ui_sender,
+            time,
         })
     }
 
@@ -351,8 +387,9 @@ impl LocalPeerCommunicator {
         torrent_file_data: &TorrentFileData,
         peer_id: Vec<u8>,
         mut stream: TcpStream,
+        external_peer_addr: SocketAddr,
         logger_sender: LoggerSender<String>,
-        logger_ui: UiSender<MessageUI>,
+        ui_sender: UiSender<MessageUI>,
     ) -> Result<Self, InteractionHandlerErrorKind> {
         let received_handshake = msg_receiver::receive_handshake(&mut stream).map_err(|error| {
             InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::ReceivingHanshake(
@@ -371,13 +408,29 @@ impl LocalPeerCommunicator {
         })?;
         info!("Mensaje enviado: Handshake.");
 
+        let time = SystemTime::now();
+
+        ui_handler::add_external_peer(
+            &ui_sender,
+            torrent_file_data,
+            &external_peer_data,
+            &external_peer_addr,
+        )
+        .map_err(|error| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                "{}",
+                error
+            )))
+        })?;
+
         Ok(LocalPeerCommunicator {
             peer_id,
             stream,
             external_peer_data,
             role: PeerRole::Client,
             logger_sender,
-            logger_ui,
+            ui_sender,
+            time,
         })
     }
 
@@ -387,7 +440,8 @@ impl LocalPeerCommunicator {
         &mut self,
         torrent_file_data: &TorrentFileData,
         torrent_status: &Arc<RwLock<TorrentStatus>>,
-        shut_down: &Arc<RwLock<bool>>,
+        global_shut_down: &Arc<RwLock<bool>>,
+        local_shut_down: &Arc<RwLock<bool>>,
     ) -> Result<InteractionHandlerStatus, InteractionHandlerErrorKind> {
         self.send_bitfield_if_necessary(&torrent_status)?;
 
@@ -415,8 +469,10 @@ impl LocalPeerCommunicator {
             //------
 
             //todo esto es la condicion de corte que bien podria ir afuera capaz o modularizado
-            if is_shut_down_activated(&shut_down)? {
-                return Ok(InteractionHandlerStatus::SecureShutDown);
+            if is_local_shut_down_set(&local_shut_down)? {
+                return Ok(InteractionHandlerStatus::SecureLocalShutDown);
+            } else if is_global_shut_down_set(&global_shut_down)? {
+                return Ok(InteractionHandlerStatus::SecureGlobalShutDown);
             }
             //esto deberia tener otro error y capaza se puede sacar del loop
             let torrent_status = torrent_status.read().map_err(|error| {
@@ -640,12 +696,19 @@ impl LocalPeerCommunicator {
                 },
             )?;
             self.logger_sender
-                .send(format!("Se completó la pieza número {}. [Ok]", piece_index))
+                .send(format!("[OK] Se completó la pieza número {}.", piece_index))
                 .map_err(|err| {
                     InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::LogError(
                         format!("{}", err),
                     ))
                 })?;
+            ui_handler::update_torrent_status(&self.ui_sender, torrent_file_data, torrent_status)
+                .map_err(|error| {
+                InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                    "{}",
+                    error
+                )))
+            })?;
         }
         Ok(())
     }
@@ -706,6 +769,25 @@ impl LocalPeerCommunicator {
             })?;
 
         self.check_piece(torrent_file_data, &mut torrent_status, path, piece_index)?;
+
+        let download_duration = self.time.elapsed().map_err(|err| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::CalculatingTime(
+                format!("{}", err),
+            ))
+        })?;
+        ui_handler::update_download_data(
+            &self.ui_sender,
+            torrent_file_data,
+            &self.external_peer_data,
+            torrent_status.get_downloaded_bytes(),
+            download_duration,
+        )
+        .map_err(|err| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                "{}",
+                err
+            )))
+        })?;
         Ok(())
     }
 
@@ -726,20 +808,45 @@ impl LocalPeerCommunicator {
     ///
     fn update_am_interested_field(
         &mut self,
+        torrent_file_data: &TorrentFileData,
+
         new_value: bool,
     ) -> Result<(), InteractionHandlerErrorKind> {
         self.external_peer_data.am_interested = new_value;
+        ui_handler::update_peers_state(
+            &self.ui_sender,
+            torrent_file_data,
+            &self.external_peer_data,
+        )
+        .map_err(|error| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                "{}",
+                error
+            )))
+        })?;
         Ok(())
     }
 
     /// Funcion que actualiza si un peer me tiene chokeado a mi cliente
     ///
     fn update_peer_choking_field(
-        //esta funcion ya no sirve para nada
         &mut self,
+        torrent_file_data: &TorrentFileData,
+
         new_value: bool,
     ) -> Result<(), InteractionHandlerErrorKind> {
         self.external_peer_data.peer_choking = new_value;
+        ui_handler::update_peers_state(
+            &self.ui_sender,
+            torrent_file_data,
+            &self.external_peer_data,
+        )
+        .map_err(|error| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                "{}",
+                error
+            )))
+        })?;
         Ok(())
     }
 
@@ -747,9 +854,22 @@ impl LocalPeerCommunicator {
     ///
     fn update_peer_interested_field(
         &mut self,
+        torrent_file_data: &TorrentFileData,
+
         new_value: bool,
     ) -> Result<(), InteractionHandlerErrorKind> {
         self.external_peer_data.peer_interested = new_value;
+        ui_handler::update_peers_state(
+            &self.ui_sender,
+            torrent_file_data,
+            &self.external_peer_data,
+        )
+        .map_err(|error| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                "{}",
+                error
+            )))
+        })?;
         Ok(())
     }
 
@@ -836,13 +956,15 @@ impl LocalPeerCommunicator {
     ) -> Result<(), InteractionHandlerErrorKind> {
         match received_msg {
             P2PMessage::KeepAlive => Ok(()),
-            P2PMessage::Choke => self.update_peer_choking_field(true),
-            P2PMessage::Unchoke => self.update_peer_choking_field(false),
+            P2PMessage::Choke => self.update_peer_choking_field(torrent_file_data, true),
+            P2PMessage::Unchoke => self.update_peer_choking_field(torrent_file_data, false),
             P2PMessage::Interested => {
-                self.update_peer_interested_field(true)?;
+                self.update_peer_interested_field(torrent_file_data, true)?;
                 self.set_up_peer_roll_as_server()
             }
-            P2PMessage::NotInterested => self.update_peer_interested_field(false),
+            P2PMessage::NotInterested => {
+                self.update_peer_interested_field(torrent_file_data, false)
+            }
             P2PMessage::Have { piece_index } => self.update_server_peer_piece_status(
                 usize::try_from(*piece_index).map_err(|err| {
                     InteractionHandlerErrorKind::Unrecoverable(
@@ -924,11 +1046,11 @@ impl LocalPeerCommunicator {
         })?;
         let piece_index = match torrent_status.look_for_a_missing_piece_index(&*self) {
             Some(piece_index) => {
-                self.update_am_interested_field(true)?;
+                self.update_am_interested_field(torrent_file_data, true)?;
                 piece_index
             }
             None => {
-                self.update_am_interested_field(false)?;
+                self.update_am_interested_field(torrent_file_data, false)?;
                 msg_sender::send_not_interested(&mut self.stream).map_err(|err| {
                     InteractionHandlerErrorKind::Recoverable(
                         InteractionHandlerError::SendingMessage(format!("{}", err)),
@@ -1031,6 +1153,26 @@ impl LocalPeerCommunicator {
             })?;
 
         torrent_status.increment_uploaded_counter(amount_of_bytes.into());
+
+        let upload_duration = self.time.elapsed().map_err(|err| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::CalculatingTime(
+                format!("{}", err),
+            ))
+        })?;
+        ui_handler::update_upload_data(
+            &self.ui_sender,
+            torrent_file_data,
+            &self.external_peer_data,
+            torrent_status.get_uploaded_bytes(),
+            upload_duration,
+        )
+        .map_err(|err| {
+            InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                "{}",
+                err
+            )))
+        })?;
+
         Ok(())
     }
 

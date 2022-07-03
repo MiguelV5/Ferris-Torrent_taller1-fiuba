@@ -13,12 +13,15 @@ use crate::torrent::local_peer_communicator::{
     InteractionHandlerError, InteractionHandlerErrorKind, InteractionHandlerStatus,
     LocalPeerCommunicator,
 };
+use crate::torrent::pieces_handler;
 use crate::torrent::user_interface::constants::MessageUI;
+use crate::torrent::user_interface::ui_handler;
 use gtk::glib::Sender as UiSender;
 use std::net::TcpListener;
 use std::sync::mpsc::Sender as LoggerSender;
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
+use std::time::Duration;
 use std::{fs, thread};
 
 type ResultInteraction<T> = Result<T, InteractionHandlerError>;
@@ -54,72 +57,136 @@ fn remove_all(torrent_file_data: &TorrentFileData) -> ResultInteraction<()> {
     Ok(())
 }
 
+fn is_global_shut_down_set(
+    global_shut_down: &Arc<RwLock<bool>>,
+) -> Result<bool, InteractionHandlerError> {
+    let global_shut_down = global_shut_down
+        .read()
+        .map_err(|error| InteractionHandlerError::ReadingShutDownField(format!("{:?}", error)))?;
+    return Ok(*global_shut_down);
+}
+
 fn handle_interaction_with_new_peers(
     torrent_file_data: TorrentFileData,
     torrent_status: Arc<RwLock<TorrentStatus>>,
+    config_data: ConfigFileData,
     peer_id: Vec<u8>,
     address: String,
-    shut_down: Arc<RwLock<bool>>,
     logger_sender: LoggerSender<String>,
     ui_sender: UiSender<MessageUI>,
+    global_shut_down: Arc<RwLock<bool>>,
+    local_shut_down: Arc<RwLock<bool>>,
 ) -> JoinHandleInteraction<()> {
     thread::spawn(move || {
         let listener = TcpListener::bind(address)
             .map_err(|error| InteractionHandlerError::ConectingWithPeer(format!("{}", error)))?;
-        while let Ok((stream, ..)) = listener.accept() {
-            let mut local_peer = match LocalPeerCommunicator::start_communication_with_new_peer(
-                &torrent_file_data,
-                peer_id.clone(),
-                stream,
-                logger_sender.clone(),
-                ui_sender.clone(),
-            ) {
-                Ok(local_peer) => local_peer,
-                Err(InteractionHandlerErrorKind::Recoverable(err)) => {
-                    debug!("Recoverable error in the peers communication: {:?}", err);
-                    continue;
-                }
-                Err(InteractionHandlerErrorKind::Unrecoverable(err)) => {
-                    remove_all(&torrent_file_data)?;
-                    let mut shut_down = shut_down.write().map_err(|error| {
-                        InteractionHandlerError::ReadingShutDownField(format!("{:?}", error))
-                    })?;
-                    *shut_down = true;
-                    return Err(err);
-                }
-            };
-            match local_peer.interact_with_peer(&torrent_file_data, &torrent_status, &shut_down) {
-                Ok(InteractionHandlerStatus::SecureShutDown) => {
-                    remove_all(&torrent_file_data)?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|error| InteractionHandlerError::ConectingWithPeer(format!("{}", error)))?;
+
+        loop {
+            if let Ok((stream, external_peer_addr)) = listener.accept() {
+                let mut local_peer = match LocalPeerCommunicator::start_communication_with_new_peer(
+                    &torrent_file_data,
+                    peer_id.clone(),
+                    stream,
+                    external_peer_addr,
+                    logger_sender.clone(),
+                    ui_sender.clone(),
+                ) {
+                    Ok(local_peer) => local_peer,
+                    Err(InteractionHandlerErrorKind::Recoverable(err)) => {
+                        debug!("Recoverable error in the peers communication: {:?}", err);
+                        continue;
+                    }
+                    Err(InteractionHandlerErrorKind::Unrecoverable(err)) => {
+                        remove_all(&torrent_file_data)?;
+                        let mut local_shut_down = local_shut_down.write().map_err(|error| {
+                            InteractionHandlerError::ReadingShutDownField(format!("{:?}", error))
+                        })?;
+                        *local_shut_down = true;
+                        return Err(err);
+                    }
+                };
+                let interaction_result = match local_peer.interact_with_peer(
+                    &torrent_file_data,
+                    &torrent_status,
+                    &global_shut_down,
+                    &local_shut_down,
+                ) {
+                    Ok(InteractionHandlerStatus::SecureLocalShutDown) => {
+                        remove_all(&torrent_file_data)?;
+                        Ok(())
+                    }
+                    Ok(InteractionHandlerStatus::SecureGlobalShutDown) => Ok(()),
+                    Ok(InteractionHandlerStatus::FinishInteraction) => {
+                        pieces_handler::assemble_all_completed_pieces(
+                            config_data.get_download_path(),
+                            &torrent_file_data,
+                        )
+                        .map_err(|err| {
+                            InteractionHandlerError::PiecesHandler(format!("{}", err))
+                        })?;
+                        return Ok(());
+                    }
+                    Ok(InteractionHandlerStatus::LookForAnotherPeer) => {
+                        let mut torrent_status = torrent_status.write().map_err(|error| {
+                            InteractionHandlerError::UpdatingWasRequestedField(format!(
+                                "{:?}",
+                                error
+                            ))
+                        })?;
+                        torrent_status.set_all_pieces_as_not_requested();
+                        ui_handler::remove_external_peer(
+                            &ui_sender,
+                            &torrent_file_data,
+                            &local_peer.external_peer_data,
+                        )
+                        .map_err(|error| InteractionHandlerError::UiError(format!("{}", error)))?;
+                        continue;
+                    }
+                    Err(InteractionHandlerErrorKind::Recoverable(err)) => {
+                        debug!("Recoverable error in the peers communication: {:?}", err);
+                        let mut torrent_status = torrent_status.write().map_err(|error| {
+                            InteractionHandlerError::UpdatingWasRequestedField(format!(
+                                "{:?}",
+                                error
+                            ))
+                        })?;
+                        torrent_status.set_all_pieces_as_not_requested();
+                        ui_handler::remove_external_peer(
+                            &ui_sender,
+                            &torrent_file_data,
+                            &local_peer.external_peer_data,
+                        )
+                        .map_err(|error| InteractionHandlerError::UiError(format!("{}", error)))?;
+                        continue;
+                    }
+                    Err(InteractionHandlerErrorKind::Unrecoverable(err)) => {
+                        remove_all(&torrent_file_data)?;
+                        let mut local_shut_down = local_shut_down.write().map_err(|error| {
+                            InteractionHandlerError::ReadingShutDownField(format!("{:?}", error))
+                        })?;
+                        *local_shut_down = true;
+                        Err(err)
+                    }
+                };
+
+                ui_handler::remove_external_peer(
+                    &ui_sender,
+                    &torrent_file_data,
+                    &local_peer.external_peer_data,
+                )
+                .map_err(|error| InteractionHandlerError::UiError(format!("{}", error)))?;
+                return interaction_result;
+            } else {
+                if is_global_shut_down_set(&global_shut_down)? {
                     return Ok(());
                 }
-                Ok(InteractionHandlerStatus::FinishInteraction) => return Ok(()),
-                Ok(InteractionHandlerStatus::LookForAnotherPeer) => {
-                    let mut torrent_status = torrent_status.write().map_err(|error| {
-                        InteractionHandlerError::UpdatingWasRequestedField(format!("{:?}", error))
-                    })?;
-                    torrent_status.set_all_pieces_as_not_requested();
-                    continue;
-                }
-                Err(InteractionHandlerErrorKind::Recoverable(err)) => {
-                    debug!("Recoverable error in the peers communication: {:?}", err);
-                    let mut torrent_status = torrent_status.write().map_err(|error| {
-                        InteractionHandlerError::UpdatingWasRequestedField(format!("{:?}", error))
-                    })?;
-                    torrent_status.set_all_pieces_as_not_requested();
-                    continue;
-                }
-                Err(InteractionHandlerErrorKind::Unrecoverable(err)) => {
-                    remove_all(&torrent_file_data)?;
-                    let mut shut_down = shut_down.write().map_err(|error| {
-                        InteractionHandlerError::ReadingShutDownField(format!("{:?}", error))
-                    })?;
-                    *shut_down = true;
-                    return Err(err);
-                }
+                thread::sleep(Duration::from_secs(1));
+                continue;
             }
         }
-        Ok(())
     })
 }
 
@@ -142,17 +209,26 @@ fn handle_interaction_with_torrent_peers(
     torrent_file_data: TorrentFileData,
     tracker_response_data: TrackerResponseData,
     torrent_status: Arc<RwLock<TorrentStatus>>,
+    config_data: ConfigFileData,
     peer_id: Vec<u8>,
     mut list_connected_peers: Vec<usize>,
     logger_sender: LoggerSender<String>,
     ui_sender: UiSender<MessageUI>,
-    shut_down: Arc<RwLock<bool>>,
+    global_shut_down: Arc<RwLock<bool>>,
+    local_shut_down: Arc<RwLock<bool>>,
 ) -> JoinHandleInteraction<()> {
     thread::spawn(move || loop {
         if list_connected_peers.is_empty() {
             return Err(InteractionHandlerError::ConectingWithPeer(
                 "No peers left to connect.".to_string(),
             ));
+        }
+        if is_global_shut_down_set(&global_shut_down)? {
+            info!(
+                "Shut down seguro del torrent {}.",
+                torrent_file_data.get_torrent_representative_name()
+            );
+            return Ok(());
         }
 
         let current_peer_index = list_connected_peers[0];
@@ -172,20 +248,33 @@ fn handle_interaction_with_torrent_peers(
             }
             Err(InteractionHandlerErrorKind::Unrecoverable(err)) => {
                 remove_all(&torrent_file_data)?;
-                let mut shut_down = shut_down.write().map_err(|error| {
+                let mut local_shut_down = local_shut_down.write().map_err(|error| {
                     InteractionHandlerError::ReadingShutDownField(format!("{:?}", error))
                 })?;
-                *shut_down = true;
+                *local_shut_down = true;
                 return Err(err);
             }
         };
 
-        match local_peer.interact_with_peer(&torrent_file_data, &torrent_status, &shut_down) {
-            Ok(InteractionHandlerStatus::SecureShutDown) => {
+        let interaction_result = match local_peer.interact_with_peer(
+            &torrent_file_data,
+            &torrent_status,
+            &global_shut_down,
+            &local_shut_down,
+        ) {
+            Ok(InteractionHandlerStatus::SecureLocalShutDown) => {
                 remove_all(&torrent_file_data)?;
+                Ok(())
+            }
+            Ok(InteractionHandlerStatus::SecureGlobalShutDown) => Ok(()),
+            Ok(InteractionHandlerStatus::FinishInteraction) => {
+                pieces_handler::assemble_all_completed_pieces(
+                    config_data.get_download_path(),
+                    &torrent_file_data,
+                )
+                .map_err(|err| InteractionHandlerError::PiecesHandler(format!("{}", err)))?;
                 return Ok(());
             }
-            Ok(InteractionHandlerStatus::FinishInteraction) => return Ok(()),
             Ok(InteractionHandlerStatus::LookForAnotherPeer) => {
                 let index = list_connected_peers.remove(0);
                 list_connected_peers.push(index);
@@ -193,6 +282,12 @@ fn handle_interaction_with_torrent_peers(
                     InteractionHandlerError::UpdatingWasRequestedField(format!("{:?}", error))
                 })?;
                 torrent_status.set_all_pieces_as_not_requested();
+                ui_handler::remove_external_peer(
+                    &ui_sender,
+                    &torrent_file_data,
+                    &local_peer.external_peer_data,
+                )
+                .map_err(|error| InteractionHandlerError::UiError(format!("{}", error)))?;
                 continue;
             }
             Err(InteractionHandlerErrorKind::Recoverable(err)) => {
@@ -202,17 +297,32 @@ fn handle_interaction_with_torrent_peers(
                     InteractionHandlerError::UpdatingWasRequestedField(format!("{:?}", error))
                 })?;
                 torrent_status.set_all_pieces_as_not_requested();
+                ui_handler::remove_external_peer(
+                    &ui_sender,
+                    &torrent_file_data,
+                    &local_peer.external_peer_data,
+                )
+                .map_err(|error| InteractionHandlerError::UiError(format!("{}", error)))?;
                 continue;
             }
             Err(InteractionHandlerErrorKind::Unrecoverable(err)) => {
                 remove_all(&torrent_file_data)?;
-                let mut shut_down = shut_down.write().map_err(|error| {
+                let mut local_shut_down = local_shut_down.write().map_err(|error| {
                     InteractionHandlerError::ReadingShutDownField(format!("{:?}", error))
                 })?;
-                *shut_down = true;
-                return Err(err);
+                *local_shut_down = true;
+                Err(err)
             }
-        }
+        };
+
+        ui_handler::remove_external_peer(
+            &ui_sender,
+            &torrent_file_data,
+            &local_peer.external_peer_data,
+        )
+        .map_err(|error| InteractionHandlerError::UiError(format!("{}", error)))?;
+
+        return interaction_result;
     })
 }
 
@@ -226,14 +336,14 @@ fn handle_interaction_with_torrent_peers(
 /// o en caso de error interno.
 ///
 pub fn handle_general_interaction_with_peers(
-    torrent_file_data: TorrentFileData,
-    tracker_response_data: TrackerResponseData,
+    torrent_file_data: &TorrentFileData,
+    tracker_response_data: &TrackerResponseData,
     torrent_status: TorrentStatus,
     config_data: &ConfigFileData,
     peer_id: Vec<u8>,
-    shut_down: Arc<RwLock<bool>>,
-    logger_sender: LoggerSender<String>,
-    ui_sender: UiSender<MessageUI>,
+    global_shut_down: Arc<RwLock<bool>>,
+    logger_sender: &LoggerSender<String>,
+    ui_sender: &UiSender<MessageUI>,
 ) -> Result<(), InteractionHandlerError> {
     set_up_directory(&torrent_file_data)?;
     let torrent_status = Arc::new(RwLock::new(torrent_status));
@@ -241,36 +351,44 @@ pub fn handle_general_interaction_with_peers(
     let (list_connected_peers_1, list_connected_peers_2) =
         generate_list_of_connected_peers(&tracker_response_data);
 
+    let local_shut_down = Arc::new(RwLock::new(false));
+
     let handler_local_peer_0 = handle_interaction_with_new_peers(
         torrent_file_data.clone(),
         torrent_status.clone(),
+        config_data.clone(),
         peer_id.clone(),
         address,
-        shut_down.clone(),
         logger_sender.clone(),
         ui_sender.clone(),
+        global_shut_down.clone(),
+        local_shut_down.clone(),
     );
 
     let handler_local_peer_1 = handle_interaction_with_torrent_peers(
         torrent_file_data.clone(),
         tracker_response_data.clone(),
         torrent_status.clone(),
+        config_data.clone(),
         peer_id.clone(),
         list_connected_peers_1,
         logger_sender.clone(),
         ui_sender.clone(),
-        shut_down.clone(),
+        global_shut_down.clone(),
+        local_shut_down.clone(),
     );
 
     let handler_local_peer_2 = handle_interaction_with_torrent_peers(
-        torrent_file_data,
-        tracker_response_data,
+        torrent_file_data.clone(),
+        tracker_response_data.clone(),
         torrent_status,
+        config_data.clone(),
         peer_id,
         list_connected_peers_2,
-        logger_sender,
-        ui_sender,
-        shut_down,
+        logger_sender.clone(),
+        ui_sender.clone(),
+        global_shut_down,
+        local_shut_down,
     );
 
     let result_local_peer_1 = handler_local_peer_0.join().map_err(|_| {

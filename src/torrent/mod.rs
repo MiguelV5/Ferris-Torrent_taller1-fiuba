@@ -9,4 +9,5 @@ pub mod logger;
 pub mod parsers;
 pub mod pieces_handler;
 pub mod server;
+pub mod torrent_handler;
 pub mod user_interface;

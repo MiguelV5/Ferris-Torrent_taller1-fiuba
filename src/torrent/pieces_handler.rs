@@ -4,9 +4,10 @@
 
 use super::data::torrent_file_data::{TargetFilesData, TorrentFileData};
 use log::info;
+use core::fmt;
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::{Read, Write}, error::Error,
 };
 
 #[derive(Debug, PartialEq)]
@@ -15,6 +16,14 @@ pub enum PiecesAssemblerError {
     ReadingAPieceFile(String),
     WritingTargetFile(String),
 }
+
+impl fmt::Display for PiecesAssemblerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\n    {:#?}\n", self)
+    }
+}
+
+impl Error for PiecesAssemblerError {}
 
 fn set_up_download_dir(
     download_dir_path: &str,
