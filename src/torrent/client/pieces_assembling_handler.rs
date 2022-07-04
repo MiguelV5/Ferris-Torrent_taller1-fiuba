@@ -1,5 +1,5 @@
-//!
-//!
+//! # Modulo de ensamblado de piezas.
+//! Este modulo contiene las funciones encargadas de controlar todo el ensamblado de piezas a un único archivo.
 //!
 
 use crate::torrent::data::torrent_file_data::{TargetFilesData, TorrentFileData};
@@ -83,7 +83,11 @@ fn remove_all_assembled_data(piece_file_path: &str) {
     let _rm_result = fs::remove_dir_all(piece_file_path);
 }
 
-// (Por ahora solo soporta el ensamblado SINGLE FILE)
+///
+/// FUNCION PRINCIPAL
+/// Funcion encargada de el ensamblado de todas las piezas en un único archivo, siendo que actualmente se soporta
+/// la descarga de archivos del tipo Single File.
+///
 pub fn assemble_all_completed_pieces(
     desired_path_for_target: String,
     torrent_file_data: &TorrentFileData,

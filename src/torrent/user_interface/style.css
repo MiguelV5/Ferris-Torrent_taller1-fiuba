@@ -1,32 +1,32 @@
 window {
-  background-color: rgb(255, 255, 255);
+  background-color: rgb(255, 98, 0);
 }
 
 stack.stack_main {
-  background-image: linear-gradient(-225deg, #ffffff 0%, #ffffff 52%, #ffffff 100%);
+  background-image: linear-gradient(-225deg, rgb(255, 98, 0) 0%, #ffffff77 52%, rgb(255, 98, 0) 100%);
   text-decoration-color: #0000;
 }
 
 stack.stack_info {
-  background-image: linear-gradient(60deg, #ffa172 0%, #ffa172 100%);
+  background-image: linear-gradient(60deg, #ffdbc5 0%, #ffffff 100%);
   border-style: outset;
   border-width: 5px;
-  border-color: rgb(0, 0, 0);
-  outline-color: #431804;
+  border-color: rgb(255, 255, 255);
+  outline-color: #1cbd00;
 }
 
 label {
-  color: rgb(23, 16, 16);
+  color: rgb(210, 105, 0);
   border-color: rgb(37, 37, 37);
   font-weight: bold;
 }
 
 button {
-  border: 2px solid rgba(39, 9, 0, 0.788);
+  border: 2px solid rgba(255, 255, 255, 0.788);
 }
 
 button:hover {
-  border-color: rgba(226, 221, 219, 0.658);
+  border-color: rgba(255, 255, 255, 0.658);
   transition: .4s;
 }
 

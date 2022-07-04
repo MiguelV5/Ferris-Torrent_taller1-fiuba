@@ -44,8 +44,9 @@ fn set_global_shut_down(global_shut_down: Arc<RwLock<bool>>) -> Result<(), Box<d
     Ok(())
 }
 
-/// Funcion principal de ejecución del programa.
-/// (En su version actual) Realiza todo lo necesario para descargar una pieza válida a partir de un archivo .torrent dado por consola.
+///
+///  FUNCION PRINCIPAL PARA LA EJECUCION DEL PROGRAMA
+/// A partir de una ruta enviada por consola (la ruta puede corresponder a un archivo .torrent en particular o a un directorio con archivos .torrent) se descarga/descargan todos los archivos correspondientes a cada uno de los .torrent dentro de una carpeta especificada dentro del archivo de configuración. Además, es necesario que en el archivo de configuracion se suministre la ruta del directorio de los logs a crear y el puerto en donde se podran escuchar conexiones externas.  
 /// Devuelve un Error si hubo algún problema durante todo el proceso.
 ///
 pub fn run() -> Result<(), Box<dyn Error>> {

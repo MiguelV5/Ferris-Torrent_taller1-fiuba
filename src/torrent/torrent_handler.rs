@@ -1,8 +1,12 @@
+//! # Modulo de manejo general de todos los archivos .torrent a ser descargados.
+//! Este modulo contiene las funciones encargadas del menejo multithreading para la
+//! descarga de varios archivos en paralelo.
+
 use crate::torrent::{
     client::{
         entry_files_management, medatada_analyzer,
         peers_communication::{self, local_peer_communicator::generate_peer_id},
-        tracker_comunication::http_handler,
+        tracker_communication::http_handler,
     },
     data::{config_file_data::ConfigFileData, torrent_status::TorrentStatus},
     logger::{self, Logger},
@@ -22,13 +26,14 @@ use super::{
         medatada_analyzer::MetadataError,
         peers_communication::local_peer_communicator::InteractionHandlerError,
         pieces_assembling_handler::PiecesAssemblerError,
-        tracker_comunication::http_handler::ErrorMsgHttp,
+        tracker_communication::http_handler::ErrorMsgHttp,
     },
     data::torrent_file_data::TorrentFileData,
     logger::LogError,
     user_interface::ui_sender_handler::UiError,
 };
 
+/// Representa un tipo de error en el manejo de archivos .torrent
 #[derive(PartialEq, Debug)]
 pub enum TorrentHandlerError {
     CreatingTorrent(MetadataError),
@@ -56,6 +61,12 @@ impl Error for TorrentHandlerError {}
 type ResultTorrent = Result<(), TorrentHandlerError>;
 type JoinHandleTorrent = JoinHandle<ResultTorrent>;
 
+///
+/// Funcion principal del manejo de un archivo .torrent. A partir de la informacion sumistrada por el
+/// archivo de configuracion y por el .torrent, se realiza la comunicación con el tracker para posterior
+/// comunicacion con los distintos peers. Esto trae como consecuencia, la descarga y verificacion de cada
+/// una de las piezas con su posterior ensamblado.
+///
 fn handle_torrent(
     torrent_file: TorrentFileData,
     config_data: &ConfigFileData,
@@ -148,6 +159,10 @@ fn set_up_logger(
         .map_err(TorrentHandlerError::CreatingLogger)
 }
 
+///
+/// Funcion que se encarga de descargar todos los archivos .torrent que se encuentran en la lista dada.
+/// Retorna un handler siendo que ejecuta un thread dentro, el cual recorre los distintos .torrent a ser descargados.
+///
 fn handle_list_of_torrents(
     files_list: Vec<String>,
     config_data: ConfigFileData,
@@ -232,6 +247,14 @@ fn generate_file_lists() -> Result<(Vec<String>, Vec<String>), Box<dyn Error>> {
     Ok((files_list_1, files_list_2))
 }
 
+///
+/// FUNCION PRINCIPAL
+/// A partir de un emisor de mensajes del tpo MessageUI y un shutdown global, la función se encarga de manejar
+/// la descarga de todos los archivo .torrent con un manejo multithreading.
+/// La funcion devuelve los handler de los dos threads implementados dentro o un error en caso de que el archivo
+/// de configuracion se encuentre dañado o en caso de que no se haya pasado por consola una ruta válida para
+/// obtener los .torrent a ser descargados.
+///
 pub fn handle_all_torrents(
     ui_sender: UiSender<MessageUI>,
     global_shut_down: &Arc<RwLock<bool>>,

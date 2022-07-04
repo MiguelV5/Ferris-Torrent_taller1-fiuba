@@ -36,6 +36,12 @@ fn add_files_from_folder(list: &mut Vec<String>, folder: ReadDir) -> Result<(), 
     Ok(())
 }
 
+///
+/// Funcion encargada de analizar la ruta enviada por consola y generar una lista con todos los archivos .torrent que
+/// pertenecen a ese directorio o archivo.
+/// En caso de ser un directorio, la lista posee cada una de las rutas a cada archivo . torrent.
+/// En caso de ser un archivo, tambien se lo coloca en una lista y se lo retorna como único elemento de la lista.
+///
 pub fn create_list_files() -> Result<Vec<String>, EntryFilesError> {
     let mut list_files = vec![];
     let mut iter_args = env::args();

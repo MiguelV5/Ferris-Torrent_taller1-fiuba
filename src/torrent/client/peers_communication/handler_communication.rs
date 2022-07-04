@@ -76,6 +76,15 @@ fn set_shut_down(shut_down: Arc<RwLock<bool>>) -> Result<(), InteractionHandlerE
     Ok(())
 }
 
+///
+/// Funcion encargada de realizar la interaccion con unico peer dentro de un thread. Esta interaccion se
+/// comienza con el protocolo correspondiente a un server.
+/// La funcion finaliza cuando se activa el shutdown global, local, cuando se obtienen todas las piezas posibles
+/// a partir del peer con el cual no estamos comunicando o en caso de error.
+/// Es importante remarcar que no todos los tipos de errores detienen la comunicacion con los peers, dado que
+/// existen errores recuperables (los cuales no afectan la continuacion de la descarga de piezas a traves de otros
+/// medios) y los errores irrecuperables (los cuales detienen completamente la descarga del torrent e imprimen un fallo tanto por consola como en el archivo logs)
+///
 fn handle_interaction_starting_as_server(
     read_only_data: (TorrentFileData, ConfigFileData, PeerId, ExternalPeerAddres),
     torrent_status: Arc<RwLock<TorrentStatus>>,
@@ -201,6 +210,15 @@ fn generate_list_of_connected_peers(
     (list_connected_peers_1, list_connected_peers_2)
 }
 
+///
+/// Funcion encargada de realizar la interaccion con unico peer dentro de un thread. Esta interaccion se
+/// comienza con el protocolo correspondiente a un cliente.
+/// La funcion finaliza cuando se activa el shutdown global, local, cuando se obtienen todas las piezas posibles
+/// a partir del peer con el cual no estamos comunicando o en caso de error.
+/// Es importante remarcar que no todos los tipos de errores detienen la comunicacion con los peers, dado que
+/// existen errores recuperables (los cuales no afectan la continuacion de la descarga de piezas a traves de otros
+/// medios) y los errores irrecuperables (los cuales detienen completamente la descarga del torrent e imprimen un fallo tanto por consola como en el archivo logs)
+///
 fn handle_interaction_starting_as_client(
     read_only_data: (TorrentFileData, TrackerResponseData, ConfigFileData, PeerId),
     torrent_status: Arc<RwLock<TorrentStatus>>,
@@ -325,13 +343,14 @@ fn handle_interaction_starting_as_client(
     })
 }
 
-// FUNCION PRINCIPAL
+///
+/// FUNCION PRINCIPAL
 /// Funcion encargada de manejar toda conexion y comunicación con todos los
 /// peers que se hayan obtenido a partir de una respuesta de tracker e info
 /// adicional del archivo .torrent correspondiente.
-/// (***Comportandose como LocalPeerCommunicator de rol: Client***)
+/// (***Comportandose como Cliente y como Server por la caracteristica hibrida que poseen los LocalPeerCommunicator***)
 ///
-/// POR AHORA finaliza la comunicación cuando puede completar una pieza completa,
+/// Finaliza la conexion en caso de activarse el shutdown global, en caso de completar todo el archivo
 /// o en caso de error interno.
 ///
 pub fn handle_general_interaction_with_peers(

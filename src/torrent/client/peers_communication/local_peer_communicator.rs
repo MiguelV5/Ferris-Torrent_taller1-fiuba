@@ -1,6 +1,6 @@
-//! # Modulo de manejo general de la estructura principal: Client
-//! Este modulo contiene las funciones encargadas del comportamiento general
-//! de nuestro cliente como peer de tipo leecher.
+//! # Modulo de manejo general de la estructura principal: LocalPeerCommunicator
+//! Este modulo contiene las funciones encargadas de la interaccion de un
+//! LocalPeerCommunicator con un peer externo.
 
 use crate::torrent::{
     client::{
@@ -42,7 +42,7 @@ pub const SECS_CONNECT_TIMEOUT: u64 = 10;
 //========================================================
 
 #[derive(Debug)]
-/// Struct que tiene por comportamiento todo el manejo general de actualizacion importante de datos, almacenamiento de los mismos y ejecución de metodos importantes para la comunicación con peers durante la ejecución del programa a modo de leecher.
+/// Struct que tiene por comportamiento todo el manejo general de actualizacion importante de datos, almacenamiento de los mismos y ejecución de metodos importantes para la comunicación con peers durante la ejecución del programa.
 pub struct LocalPeerCommunicator {
     pub peer_id: Vec<u8>,
     pub stream: TcpStream,
@@ -53,6 +53,7 @@ pub struct LocalPeerCommunicator {
     pub clock: SystemTime,
 }
 
+///Rol que puede tomar un local peer communicator dentro de la interaccion con peers externos
 #[derive(PartialEq, Debug, Clone)]
 pub enum PeerRole {
     Client,
@@ -61,7 +62,6 @@ pub enum PeerRole {
 
 //========================================================
 
-//Ver si corresponde este enum en otro lugar
 /// Enum para distincion de almacenamiento al recibir un mensaje Piece
 enum InterestOfReceivedPieceMsg {
     AlreadyDownloaded,
@@ -70,6 +70,7 @@ enum InterestOfReceivedPieceMsg {
 
 //========================================================
 
+/// Errores del tipo recuperables e irrecuperables para saber si abortar o no la descarga de un torrent.
 #[derive(PartialEq, Debug, Clone)]
 pub enum InteractionHandlerErrorKind {
     Recoverable(InteractionHandlerError),
@@ -84,8 +85,8 @@ impl fmt::Display for InteractionHandlerErrorKind {
 
 impl Error for InteractionHandlerErrorKind {}
 
-#[derive(PartialEq, Debug, Clone)]
 /// Representa un tipo de error en la comunicación general P2P con un peer individual.
+#[derive(PartialEq, Debug, Clone)]
 pub enum InteractionHandlerError {
     ConectingWithPeer(String),
     RestartingDownload(String),
@@ -319,6 +320,9 @@ impl LocalPeerCommunicator {
     // FUNCIONES PRINCIPALES
 
     ///
+    /// A partir de un stream dado, comienza la comunicacion con un peer externo segun protocolo de cliente.
+    /// En caso de cumplir con el correcto envio y recepcion de mensajes segun protocolo, se procede a crear un
+    /// LocalPeerCommunicator.
     ///
     pub fn start_communication_as_client(
         torrent_file_data: &TorrentFileData,
@@ -383,6 +387,9 @@ impl LocalPeerCommunicator {
     }
 
     ///
+    /// A partir de un stream dado, comienza la comunicacion con un peer externo segun protocolo de server.
+    /// En caso de cumplir con el correcto envio y recepcion de mensajes segun protocolo, se procede a crear un
+    /// LocalPeerCommunicator.
     ///
     pub fn start_communication_as_server(
         torrent_file_data: &TorrentFileData,
@@ -436,6 +443,10 @@ impl LocalPeerCommunicator {
     }
 
     ///
+    /// Función que se encarga de la interaccion completa entre el LocalPeerCommunicator y un peer externo.
+    /// Esta interaccion comprende el pedido y envio de piezas, siendo que cada uno de los comunicadores peer locales,
+    /// poseen la particularidad de que son "hibridos", lo cual les permite actuar tanto como cliente como tambien
+    /// como server.
     ///
     pub fn interact_with_peer(
         &mut self,
@@ -447,7 +458,6 @@ impl LocalPeerCommunicator {
         self.send_bitfield_if_necessary(torrent_status)?;
 
         loop {
-            //esto es lo importanet de la funcion que ya quedó modularizado bien
             let received_msg =
                 msg_receiver::receive_message(&mut self.stream).map_err(|error| {
                     InteractionHandlerErrorKind::Recoverable(
@@ -467,15 +477,14 @@ impl LocalPeerCommunicator {
                 torrent_status,
                 &received_msg,
             )?;
-            //------
 
-            //todo esto es la condicion de corte que bien podria ir afuera capaz o modularizado
+            //------ Verificaciones -----
+
             if is_local_shut_down_set(local_shut_down)? {
                 return Ok(InteractionHandlerStatus::SecureLocalShutDown);
             } else if is_global_shut_down_set(global_shut_down)? {
                 return Ok(InteractionHandlerStatus::SecureGlobalShutDown);
             }
-            //esto deberia tener otro error y capaza se puede sacar del loop
             let torrent_status = torrent_status.read().map_err(|error| {
                 InteractionHandlerErrorKind::Unrecoverable(InteractionHandlerError::SendingMessage(
                     format!("{:?}", error),
@@ -513,6 +522,8 @@ impl LocalPeerCommunicator {
     }
 
     //BITFIELD
+
+    ///
     /// Funcion que actualiza la representación de bitfield de un peer dado
     /// por su indice
     ///
@@ -536,7 +547,9 @@ impl LocalPeerCommunicator {
     }
 
     // HAVE
-    /// Funcion que actualiza la representación de bitfield de un peer dado
+
+    ///
+    ///  Funcion que actualiza la representación de bitfield de un peer dado
     /// por su indice (A diferencia de [update_peer_bitfield()], esta funcion
     /// actualiza solo el estado de UNA pieza, esto es causado por
     /// la recepcion de un mensaje P2P de tipo Have)
@@ -718,6 +731,7 @@ impl LocalPeerCommunicator {
         Ok(())
     }
 
+    ///
     /// Funcion encargada de realizar toda la logica de guardado de
     /// un bloque en disco y actualizacion correspondiente de
     /// mi propio bitfield y el estado de la descarga.
@@ -798,7 +812,8 @@ impl LocalPeerCommunicator {
 
     // UPDATING FIELDS
 
-    /// Funcion que actualiza si el cliente está interesado en una pieza
+    ///
+    ///  Funcion que actualiza si el cliente está interesado en una pieza
     /// de un peer dado por su indice.
     ///
     fn update_am_interested_field(
@@ -822,7 +837,8 @@ impl LocalPeerCommunicator {
         Ok(())
     }
 
-    /// Funcion que actualiza si un peer me tiene chokeado a mi cliente
+    ///
+    ///  Funcion que actualiza si un peer me tiene chokeado a mi cliente
     ///
     fn update_peer_choking_field(
         &mut self,
@@ -845,7 +861,8 @@ impl LocalPeerCommunicator {
         Ok(())
     }
 
-    /// Funcion que actualiza si un peer está interesado en alguna de nuestras piezas
+    ///
+    ///  Funcion que actualiza si un peer está interesado en alguna de nuestras piezas
     ///
     fn update_peer_interested_field(
         &mut self,
@@ -943,6 +960,10 @@ impl LocalPeerCommunicator {
     }
 
     //UPDATE INFORMATION
+
+    ///
+    /// Se acutaliza la información del LocalPeerCommunicator y del TorrentStatus a partir de un mensajes P2P dado.
+    ///
     fn update_information_according_to_the_received_msg(
         &mut self,
         torrent_file_data: &TorrentFileData,
@@ -1029,6 +1050,12 @@ impl LocalPeerCommunicator {
         Ok(())
     }
 
+    ///
+    /// Se realiza una busqueda de las piezas faltantes y se las compara con las que posee el peer con el cual
+    /// estamos interactuando. En base a esta coparación se define si quedan piezas por pedir y el mensaje a enviar en caso de que corresponda:
+    /// En el caso de que el LocalPeerCommunicator este Choke -> se le envía un Interested
+    /// En el caso de que el LocalPeerCommunicator este Unchoke -> se le envía una Request
+    ///
     fn look_for_pieces(
         &mut self,
         torrent_file_data: &TorrentFileData,
@@ -1064,6 +1091,7 @@ impl LocalPeerCommunicator {
         Ok(())
     }
 
+    //REQUEST
     fn check_requested_block(
         &mut self,
         torrent_file_data: &TorrentFileData,
@@ -1106,6 +1134,9 @@ impl LocalPeerCommunicator {
         Ok(())
     }
 
+    ///
+    /// Verificacion de mensaje recibido y envio del bloque solicitado.
+    ///
     fn send_requested_block(
         &mut self,
         torrent_file_data: &TorrentFileData,
@@ -1171,6 +1202,11 @@ impl LocalPeerCommunicator {
         Ok(())
     }
 
+    ///
+    /// Envia un mesaje dependiendo del mensaje que recibio:
+    /// Si recibió un Interested -> Envia un Unchoke
+    /// Si recibió un Request -> Envia el bloque solicitado
+    ///
     fn send_msg_according_to_the_received_msg(
         &mut self,
         torrent_file_data: &TorrentFileData,
@@ -1208,6 +1244,11 @@ impl LocalPeerCommunicator {
         self.set_up_peer_roll_as_client()
     }
 
+    ///
+    /// Accionar respecto al rol actual:
+    /// Rol cliente -> Se buscan piezas para pedir
+    /// Rol server -> Se responde el mensajes correspondiente al mensaje recibido
+    ///
     fn react_according_to_the_peer_role(
         &mut self,
         torrent_file_data: &TorrentFileData,

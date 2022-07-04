@@ -32,6 +32,7 @@ impl fmt::Display for BlockHandlerError {
 
 impl Error for BlockHandlerError {}
 
+///
 /// Funcion que, dado un bloque descargado de una comunicacion individual con
 /// un peer, escribe en disco (en un path correspondiente a su PIEZA respectiva)
 /// dicho bloque
@@ -73,6 +74,7 @@ fn to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|a| format!("{:02x}", a)).collect()
 }
 
+///
 /// Funcion que busca en el archivo de piezas a la pieza correspondiente
 /// segun el indice dado, le calcula sha1 y verifica que sea el mismo que estaba
 /// contenido en el archivo .torrent dado.
@@ -107,6 +109,11 @@ pub fn check_sha1_piece(
     }
 }
 
+///
+/// Funcion encargada de obtener una bloque previamente descargador dado su numero de pieza, el byte de comienzo
+/// y la cantidad de bytes requeridos. Ademas de estos tres datos mencionados anteriormente, se debe suministrar la ruta en donde se
+/// encuentran guardadas las piezas temporalmente.
+///
 pub fn get_block(
     piece_index: u32,
     beginning_byte_index: u32,
