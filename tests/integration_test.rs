@@ -491,7 +491,7 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
     let peer_id = generate_peer_id();
 
     //INICIO LA COMUNICACION DEL LADO DEL CLIENTE
-    let local_peer = LocalPeerCommunicator::start_communication_with_a_torrent_peer(
+    let local_peer = LocalPeerCommunicator::start_communication_as_client(
         &torrent_file_data,
         &tracker_response,
         0,
@@ -556,7 +556,7 @@ fn client_peer_interact_with_a_peer_and_receives_one_block_ok() -> Result<(), Bo
     let peer_id = generate_peer_id();
 
     //INICIO LA COMUNICACION DEL LADO DEL CLIENTE
-    let mut client_peer = LocalPeerCommunicator::start_communication_with_a_torrent_peer(
+    let mut client_peer = LocalPeerCommunicator::start_communication_as_client(
         &torrent_file_data,
         &tracker_response,
         0,
@@ -666,7 +666,7 @@ fn client_peer_interact_with_a_peer_and_completes_the_whole_file_ok() -> Result<
 
     let peer_id = generate_peer_id();
 
-    let mut client_peer = LocalPeerCommunicator::start_communication_with_a_torrent_peer(
+    let mut client_peer = LocalPeerCommunicator::start_communication_as_client(
         &torrent_file_data,
         &tracker_response,
         0,

@@ -460,7 +460,7 @@ impl TorrentFileData {
         amount_of_bytes: u32,
     ) -> Result<(), TorrentFileDataError> {
         let piece_length = self.calculate_piece_lenght(piece_index)?;
-        if u64::from(beginning_byte_index + amount_of_bytes) >= piece_length {
+        if u64::from(beginning_byte_index + amount_of_bytes) > piece_length {
             return Err(TorrentFileDataError::CheckingRequestBlock("[TorrentFileDataError] The requested amount of bytes does not match with piece lenght.".to_string()));
         }
 

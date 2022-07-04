@@ -11,7 +11,7 @@ use crate::torrent::data::{
     tracker_response_data::TrackerResponseData,
 };
 use crate::torrent::user_interface::constants::MessageUI;
-use crate::torrent::user_interface::ui_interfaz;
+use crate::torrent::user_interface::ui_sender_handler;
 use gtk::glib::Sender as UiSender;
 use std::net::TcpListener;
 use std::sync::mpsc::Sender as LoggerSender;
@@ -70,7 +70,7 @@ fn is_global_shut_down_set(
     Ok(*global_shut_down)
 }
 
-fn handle_interaction_with_new_peers(
+fn handle_interaction_starting_as_server(
     read_only_data: (TorrentFileData, ConfigFileData, PeerId, ExternalPeerAddres),
     logger_sender: LoggerSender<String>,
     ui_sender: UiSender<MessageUI>,
@@ -88,7 +88,7 @@ fn handle_interaction_with_new_peers(
 
         loop {
             if let Ok((stream, external_peer_addr)) = listener.accept() {
-                let mut local_peer = match LocalPeerCommunicator::start_communication_with_new_peer(
+                let mut local_peer = match LocalPeerCommunicator::start_communication_as_server(
                     &torrent_file_data,
                     peer_id.clone(),
                     stream,
@@ -143,7 +143,7 @@ fn handle_interaction_with_new_peers(
                             ))
                         })?;
                         torrent_status.set_all_pieces_as_not_requested();
-                        ui_interfaz::remove_external_peer(
+                        ui_sender_handler::remove_external_peer(
                             &ui_sender,
                             &torrent_file_data,
                             &local_peer.external_peer_data,
@@ -160,7 +160,7 @@ fn handle_interaction_with_new_peers(
                             ))
                         })?;
                         torrent_status.set_all_pieces_as_not_requested();
-                        ui_interfaz::remove_external_peer(
+                        ui_sender_handler::remove_external_peer(
                             &ui_sender,
                             &torrent_file_data,
                             &local_peer.external_peer_data,
@@ -178,7 +178,7 @@ fn handle_interaction_with_new_peers(
                     }
                 };
 
-                ui_interfaz::remove_external_peer(
+                ui_sender_handler::remove_external_peer(
                     &ui_sender,
                     &torrent_file_data,
                     &local_peer.external_peer_data,
@@ -211,7 +211,7 @@ fn generate_list_of_connected_peers(
     (list_connected_peers_1, list_connected_peers_2)
 }
 
-fn handle_interaction_with_torrent_peers(
+fn handle_interaction_starting_as_client(
     read_only_data: (TorrentFileData, ConfigFileData, PeerId, TrackerResponseData),
     mut list_connected_peers: Vec<usize>,
     logger_sender: LoggerSender<String>,
@@ -236,7 +236,7 @@ fn handle_interaction_with_torrent_peers(
         }
 
         let current_peer_index = list_connected_peers[0];
-        let mut local_peer = match LocalPeerCommunicator::start_communication_with_a_torrent_peer(
+        let mut local_peer = match LocalPeerCommunicator::start_communication_as_client(
             &torrent_file_data,
             &tracker_response,
             current_peer_index,
@@ -290,7 +290,7 @@ fn handle_interaction_with_torrent_peers(
                     InteractionHandlerError::UpdatingWasRequestedField(format!("{:?}", error))
                 })?;
                 torrent_status.set_all_pieces_as_not_requested();
-                ui_interfaz::remove_external_peer(
+                ui_sender_handler::remove_external_peer(
                     &ui_sender,
                     &torrent_file_data,
                     &local_peer.external_peer_data,
@@ -305,7 +305,7 @@ fn handle_interaction_with_torrent_peers(
                     InteractionHandlerError::UpdatingWasRequestedField(format!("{:?}", error))
                 })?;
                 torrent_status.set_all_pieces_as_not_requested();
-                ui_interfaz::remove_external_peer(
+                ui_sender_handler::remove_external_peer(
                     &ui_sender,
                     &torrent_file_data,
                     &local_peer.external_peer_data,
@@ -323,7 +323,7 @@ fn handle_interaction_with_torrent_peers(
             }
         };
 
-        ui_interfaz::remove_external_peer(
+        ui_sender_handler::remove_external_peer(
             &ui_sender,
             &torrent_file_data,
             &local_peer.external_peer_data,
@@ -364,7 +364,7 @@ pub fn handle_general_interaction_with_peers(
 
     let local_shut_down = Arc::new(RwLock::new(false));
 
-    let handler_local_peer_0 = handle_interaction_with_new_peers(
+    let handler_local_peer_0 = handle_interaction_starting_as_server(
         (
             torrent_file_data.clone(),
             config_data.clone(),
@@ -378,7 +378,7 @@ pub fn handle_general_interaction_with_peers(
         local_shut_down.clone(),
     );
 
-    let handler_local_peer_1 = handle_interaction_with_torrent_peers(
+    let handler_local_peer_1 = handle_interaction_starting_as_client(
         (
             torrent_file_data.clone(),
             config_data.clone(),
@@ -393,7 +393,7 @@ pub fn handle_general_interaction_with_peers(
         local_shut_down.clone(),
     );
 
-    let handler_local_peer_2 = handle_interaction_with_torrent_peers(
+    let handler_local_peer_2 = handle_interaction_starting_as_client(
         (
             torrent_file_data.clone(),
             config_data.clone(),

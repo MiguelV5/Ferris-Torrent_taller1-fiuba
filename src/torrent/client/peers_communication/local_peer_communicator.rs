@@ -16,7 +16,7 @@ use crate::torrent::{
         constants::PSTR_STRING_HANDSHAKE,
         message::{P2PMessage, PieceStatus},
     },
-    user_interface::{constants::MessageUI, ui_interfaz},
+    user_interface::{constants::MessageUI, ui_sender_handler},
 };
 extern crate rand;
 use gtk::glib::Sender as UiSender;
@@ -318,7 +318,7 @@ impl LocalPeerCommunicator {
 
     ///
     ///
-    pub fn start_communication_with_a_torrent_peer(
+    pub fn start_communication_as_client(
         torrent_file_data: &TorrentFileData,
         tracker_response: &TrackerResponseData,
         tracker_response_peer_index: usize,
@@ -356,7 +356,7 @@ impl LocalPeerCommunicator {
 
         let time = SystemTime::now();
 
-        ui_interfaz::add_external_peer(
+        ui_sender_handler::add_external_peer(
             &ui_sender,
             torrent_file_data,
             &external_peer_data,
@@ -382,7 +382,7 @@ impl LocalPeerCommunicator {
 
     ///
     ///
-    pub fn start_communication_with_new_peer(
+    pub fn start_communication_as_server(
         torrent_file_data: &TorrentFileData,
         peer_id: Vec<u8>,
         mut stream: TcpStream,
@@ -409,7 +409,7 @@ impl LocalPeerCommunicator {
 
         let time = SystemTime::now();
 
-        ui_interfaz::add_external_peer(
+        ui_sender_handler::add_external_peer(
             &ui_sender,
             torrent_file_data,
             &external_peer_data,
@@ -701,12 +701,17 @@ impl LocalPeerCommunicator {
                         format!("{}", err),
                     ))
                 })?;
-            ui_interfaz::update_torrent_status(&self.ui_sender, torrent_file_data, torrent_status)
-                .map_err(|error| {
-                    InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(
-                        format!("{}", error),
-                    ))
-                })?;
+            ui_sender_handler::update_torrent_status(
+                &self.ui_sender,
+                torrent_file_data,
+                torrent_status,
+            )
+            .map_err(|error| {
+                InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::UiError(format!(
+                    "{}",
+                    error
+                )))
+            })?;
         }
         Ok(())
     }
@@ -773,7 +778,7 @@ impl LocalPeerCommunicator {
                 format!("{}", err),
             ))
         })?;
-        ui_interfaz::update_download_data(
+        ui_sender_handler::update_download_data(
             &self.ui_sender,
             torrent_file_data,
             &self.external_peer_data,
@@ -791,16 +796,6 @@ impl LocalPeerCommunicator {
 
     // UPDATING FIELDS
 
-    /// Funcion que actualiza si mi cliente tiene chokeado a un peer especifico
-    ///
-    // fn update_am_choking_field(
-    //     &mut self,
-    //     new_value: bool,
-    // ) -> Result<(), InteractionHandlerErrorKind> {
-    //     self.external_peer_data.am_choking = new_value;
-    //     Ok(())
-    // }
-
     /// Funcion que actualiza si el cliente está interesado en una pieza
     /// de un peer dado por su indice.
     ///
@@ -811,7 +806,7 @@ impl LocalPeerCommunicator {
         new_value: bool,
     ) -> Result<(), InteractionHandlerErrorKind> {
         self.external_peer_data.am_interested = new_value;
-        ui_interfaz::update_peers_state(
+        ui_sender_handler::update_peers_state(
             &self.ui_sender,
             torrent_file_data,
             &self.external_peer_data,
@@ -834,7 +829,7 @@ impl LocalPeerCommunicator {
         new_value: bool,
     ) -> Result<(), InteractionHandlerErrorKind> {
         self.external_peer_data.peer_choking = new_value;
-        ui_interfaz::update_peers_state(
+        ui_sender_handler::update_peers_state(
             &self.ui_sender,
             torrent_file_data,
             &self.external_peer_data,
@@ -857,7 +852,7 @@ impl LocalPeerCommunicator {
         new_value: bool,
     ) -> Result<(), InteractionHandlerErrorKind> {
         self.external_peer_data.peer_interested = new_value;
-        ui_interfaz::update_peers_state(
+        ui_sender_handler::update_peers_state(
             &self.ui_sender,
             torrent_file_data,
             &self.external_peer_data,
@@ -1089,7 +1084,7 @@ impl LocalPeerCommunicator {
                 ),
             ));
         }
-        if self.peer_choking() {
+        if self.am_choking() {
             return Err(InteractionHandlerErrorKind::Recoverable(
                 InteractionHandlerError::SendingRequestedBlock(
                     "[InteractionHandlerError] The external peer who send the request is choked."
@@ -1157,7 +1152,7 @@ impl LocalPeerCommunicator {
                 format!("{}", err),
             ))
         })?;
-        ui_interfaz::update_upload_data(
+        ui_sender_handler::update_upload_data(
             &self.ui_sender,
             torrent_file_data,
             &self.external_peer_data,
@@ -1181,11 +1176,15 @@ impl LocalPeerCommunicator {
         received_msg: &P2PMessage,
     ) -> Result<(), InteractionHandlerErrorKind> {
         match received_msg {
-            P2PMessage::Interested => msg_sender::send_unchoke(&mut self.stream).map_err(|err| {
-                InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::SendingMessage(
-                    format!("{}", err),
-                ))
-            }),
+            P2PMessage::Interested => {
+                msg_sender::send_unchoke(&mut self.stream).map_err(|err| {
+                    InteractionHandlerErrorKind::Recoverable(
+                        InteractionHandlerError::SendingMessage(format!("{}", err)),
+                    )
+                })?;
+                self.external_peer_data.am_choking = false;
+                Ok(())
+            }
             P2PMessage::Request {
                 piece_index,
                 beginning_byte_index,
@@ -2672,7 +2671,7 @@ mod test_client {
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 3)?;
             let (_, _) = listener.accept()?;
-            local_peer.external_peer_data.peer_choking = false;
+            local_peer.external_peer_data.am_choking = false;
 
             let block_0 = [10; BLOCK_BYTES as usize].to_vec();
             let block_1 = [10; BLOCK_BYTES as usize].to_vec();
@@ -2715,7 +2714,7 @@ mod test_client {
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 4)?;
             let (_, _) = listener.accept()?;
-            local_peer.external_peer_data.peer_choking = false;
+            local_peer.external_peer_data.am_choking = false;
 
             let block_0 = [10; BLOCK_BYTES as usize].to_vec();
             let block_1 = [10; BLOCK_BYTES as usize].to_vec();
@@ -2758,7 +2757,7 @@ mod test_client {
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 5)?;
             let (_, _) = listener.accept()?;
-            local_peer.external_peer_data.peer_choking = false;
+            local_peer.external_peer_data.am_choking = false;
 
             let block_0 = [10; BLOCK_BYTES as usize].to_vec();
             let block_1 = [10; BLOCK_BYTES as usize].to_vec();
@@ -2801,7 +2800,7 @@ mod test_client {
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 6)?;
             let (mut external_stream, _) = listener.accept()?;
-            local_peer.external_peer_data.peer_choking = false;
+            local_peer.external_peer_data.am_choking = false;
 
             let block_0 = [10; BLOCK_BYTES as usize].to_vec();
             let block_1 = [10; BLOCK_BYTES as usize].to_vec();

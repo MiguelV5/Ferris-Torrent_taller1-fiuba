@@ -244,7 +244,10 @@ pub fn update_upload_data(
         .map_err(|err| UiError::UpdatingUpload(format!("{}", err)))?;
     let peer_name = format!("[{}] Peer: {} ", torrent_name, peer_name);
 
-    let upload_bytes = u32::try_from(upload_bytes).unwrap();
+    let upload_bytes = match u32::try_from(upload_bytes) {
+        Ok(bytes) => bytes,
+        Err(error) => return Err(UiError::UpdatingUpload(format!("{}", error))),
+    };
     let upload_bytes = f64::from(upload_bytes);
 
     let upload = upload_bytes / upload_duration.as_secs_f64();
@@ -269,7 +272,10 @@ pub fn update_download_data(
         .map_err(|err| UiError::UpdatingDownload(format!("{}", err)))?;
     let peer_name = format!("[{}] Peer: {} ", torrent_name, peer_name);
 
-    let download_bytes = u32::try_from(download_bytes).unwrap();
+    let download_bytes = match u32::try_from(download_bytes) {
+        Ok(bytes) => bytes,
+        Err(error) => return Err(UiError::UpdatingDownload(format!("{}", error))),
+    };
     let download_bytes = f64::from(download_bytes);
 
     let download = download_bytes / download_duration.as_secs_f64();

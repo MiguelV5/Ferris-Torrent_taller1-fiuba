@@ -606,7 +606,7 @@ impl MainWindow {
     }
 
     pub fn remove_peer(&mut self, peer_name: String) {
-        if let Some(info_box) = self.info_box_peers.get(&peer_name) {
+        if let Some(info_box) = self.info_box_peers.remove(&peer_name) {
             let box_peer = info_box.get_box();
             self.stacks_peers.remove(box_peer);
         }

@@ -218,19 +218,6 @@ impl MsgDescriptor {
         self.get.clone()
     }
 
-    ///Esta funcion cambia el puerto para la comunicacion con el tracker, los puertos
-    /// validos son del 6881 al 6889 si el cambio es exitoso devolvera Ok(()), en caso de llegar al
-    /// ultimo puerto valido y querer volver a cambiar se devolvera un error y el puerto volvera a setearse
-    /// al primer puerto valido.
-    // pub fn change_port(&mut self) -> Result<(), ErrorMsgHttp> {
-    //     if self.port == 6889 {
-    //         self.port = 6881;
-    //         Err(ErrorMsgHttp::NoMorePorts)
-    //     } else {
-    //         self.port += 1;
-    //         Ok(())
-    //     }
-    // }
     ///Funcion que actualiza los valores de downloaded, uploaded y left
     pub fn update_download_stats(&mut self, more_down: u64, more_up: u64) {
         self.downloaded += more_down;

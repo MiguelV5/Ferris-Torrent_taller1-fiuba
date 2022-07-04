@@ -7,7 +7,7 @@ use crate::torrent::{
     },
     data::{config_file_data::ConfigFileData, torrent_status::TorrentStatus},
     logger::{self, Logger},
-    user_interface::{constants::MessageUI, ui_interfaz},
+    user_interface::{constants::MessageUI, ui_sender_handler},
 };
 use core::fmt;
 use gtk::glib::Sender as UiSender;
@@ -27,7 +27,7 @@ use super::{
     },
     data::torrent_file_data::TorrentFileData,
     logger::LogError,
-    user_interface::ui_interfaz::UiError,
+    user_interface::ui_sender_handler::UiError,
 };
 
 #[derive(PartialEq, Debug)]
@@ -75,7 +75,7 @@ fn handle_torrent(
         .map_err(TorrentHandlerError::CommunicationWithTracker)?;
     info!("Comunicacion con el tracker exitosa");
 
-    ui_interfaz::update_torrent_information(
+    ui_sender_handler::update_torrent_information(
         ui_sender,
         &torrent_file,
         &tracker_response,
@@ -181,7 +181,7 @@ fn handle_list_of_torrents(
             };
         trace!("Almacenada y parseada información de metadata");
 
-        ui_interfaz::add_torrent(&ui_sender, &torrent_file)
+        ui_sender_handler::add_torrent(&ui_sender, &torrent_file)
             .map_err(TorrentHandlerError::UserInterface)?;
 
         let torrent_name = torrent_file.get_torrent_representative_name();
