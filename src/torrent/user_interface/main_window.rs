@@ -244,13 +244,13 @@ impl InfoBox {
         }
     }
 
-    fn change_total_size(&mut self, total_size: u64) {
+    fn change_total_size(&mut self, total_size: f64) {
         let total_size_label = self.labels.get(TOTAL_SIZE_ID);
         match total_size_label {
             Some(label) => {
                 let mut new_total_size = String::from(TOTAL_SIZE_LABEL);
                 new_total_size.push_str(total_size.to_string().as_str());
-                new_total_size.push_str(BYTES);
+                new_total_size.push_str(KILOBYTES);
                 label.set_label(&new_total_size)
             }
             None => (),
@@ -474,10 +474,10 @@ impl InfoBox {
         let download_label = self.labels.get(DOWNLOAD_ID);
         match download_label {
             Some(label) => {
-                let download = (download * f64::from(100)).round() / f64::from(100);
+                let download = (download * f64::from(100)).round() / f64::from(100000);
                 let mut new_download = String::from(DOWNLOAD_LABEL);
                 new_download.push_str(download.to_string().as_str());
-                new_download.push_str(BYTESPERSEC);
+                new_download.push_str(KILOBYTESPERSEC);
                 label.set_label(&new_download)
             }
             None => (),
@@ -488,10 +488,10 @@ impl InfoBox {
         let upload_label = self.labels.get(UPLOAD_ID);
         match upload_label {
             Some(label) => {
-                let upload = (upload * f64::from(100)).round() / f64::from(100);
+                let upload = (upload * f64::from(100)).round() / f64::from(100000);
                 let mut new_upload = String::from(UPLOAD_LABEL);
                 new_upload.push_str(upload.to_string().as_str());
-                new_upload.push_str(BYTESPERSEC);
+                new_upload.push_str(KILOBYTESPERSEC);
                 label.set_label(&new_upload)
             }
             None => (),
@@ -528,7 +528,6 @@ impl InfoBox {
         match state_client_label {
             Some(label) => {
                 let mut new_state_client = String::from(STATE_CLIENT_LABEL);
-
                 new_state_client.push_str(&state);
                 label.set_label(&new_state_client)
             }
@@ -633,7 +632,7 @@ impl MainWindow {
         }
     }
 
-    pub fn change_total_size(&mut self, torrent: String, total_size: u64) {
+    pub fn change_total_size(&mut self, torrent: String, total_size: f64) {
         let info_box = self.info_box_torrents.get_mut(&torrent);
         match info_box {
             Some(info_torrent) => {

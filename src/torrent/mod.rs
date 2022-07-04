@@ -3,11 +3,8 @@
 
 pub mod client;
 pub mod data;
-pub mod entry_files_management;
-pub mod local_peer_communicator;
 pub mod logger;
 pub mod parsers;
-pub mod pieces_handler;
-pub mod server;
+pub mod port_testing;
 pub mod torrent_handler;
 pub mod user_interface;

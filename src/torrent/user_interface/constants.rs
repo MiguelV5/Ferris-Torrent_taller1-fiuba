@@ -60,8 +60,8 @@ pub const UNCHOKE: &str = "Unchoked";
 pub const INTERESTED: &str = "Interested";
 pub const NOT_INTERESTED: &str = "Not interested";
 
-pub const BYTES: &str = " [bytes]";
-pub const BYTESPERSEC: &str = " [bytes/sec]";
+pub const KILOBYTES: &str = " [kiB]";
+pub const KILOBYTESPERSEC: &str = " [kiB/sec]";
 
 pub enum TypeOfChange {
     Addition,
@@ -89,7 +89,7 @@ pub enum MessageUI {
         torrent_name: String,
         tracker_url: String,
         info_hash: String,
-        total_size: u64,
+        total_size: f64,
         cant_pieces: u64,
         seeders: u64,
         leechers: u64,

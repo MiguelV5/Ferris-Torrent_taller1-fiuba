@@ -52,26 +52,26 @@ impl Logger {
     /// escribirlo en el archivo de logs. Solo se debe inicializar el log una vez, pero pueden
     /// existir múltiples senders clonando el sender retornado.
     ///
-    /// #Ejemplo
-    /// ```
-    /// use fa_torrent::torrent::logger::*;
-    ///
-    /// //Inicializa el sender y el receiver, y ademàs se obtiene el handle para hacer join
-    /// let logger = Logger::new("temp/logs".to_string(), "mitorrent.torrent".to_string()).unwrap();
-    /// let (sender1, handle) = logger.init_logger().unwrap();
-    /// //Obtener un segundo sender
-    /// let sender2 = sender1.clone();
-    /// sender1.send("Descargué la pieza 1".to_string());
-    /// sender2.send("Descargué la pieza 2".to_string());
-    ///
-    /// //Join final, para esperar que el hilo termine de loguear
-    /// drop(sender1);
-    /// drop(sender2);
-    /// handle.join();
-    ///
-    /// //Remuevo el archivo test que se genera
-    /// std::fs::remove_file(logger.get_log_path());
-    /// ```
+    // #Ejemplo
+    // ```
+    // use fa_torrent::torrent::logger::*;
+    //
+    // //Inicializa el sender y el receiver, y ademàs se obtiene el handle para hacer join
+    // let logger = Logger::new("temp/logs".to_string(), "mitorrent.torrent".to_string()).unwrap();
+    // let (sender1, handle) = logger.init_logger().unwrap();
+    // //Obtener un segundo sender
+    // let sender2 = sender1.clone();
+    // sender1.send("Descargué la pieza 1".to_string());
+    // sender2.send("Descargué la pieza 2".to_string());
+    //
+    // //Join final, para esperar que el hilo termine de loguear
+    // drop(sender1);
+    // drop(sender2);
+    // handle.join();
+    //
+    // //Remuevo el archivo test que se genera
+    // std::fs::remove_file(logger.get_log_path());
+    // ```
     pub fn init_logger(&self) -> Result<(Sender<String>, JoinHandle<()>), LogError> {
         let (sender, receiver): (Sender<String>, Receiver<String>) = mpsc::channel();
         let log_path = self.get_log_path();

@@ -7,7 +7,7 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::{collections::HashMap, error::Error, fmt};
 
-use crate::torrent::client::peers_comunication::handler::BLOCK_BYTES;
+use crate::torrent::client::peers_communication::handler_communication::BLOCK_BYTES;
 use crate::torrent::parsers::p2p::message::PieceStatus;
 use crate::torrent::parsers::{bencoding::values::ValuesBencoding, *};
 use rand::seq::SliceRandom;
@@ -368,7 +368,6 @@ impl TorrentFileData {
     pub fn get_total_amount_pieces(&self) -> usize {
         self.total_amount_of_pieces
     }
-
 
     ///Funcion que dado el numero de pieza devuelve su encriptacion en SHA-1
     ///

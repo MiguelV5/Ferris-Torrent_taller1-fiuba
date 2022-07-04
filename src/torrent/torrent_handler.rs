@@ -1,31 +1,34 @@
-use crate::torrent::user_interface::constants::MessageUI;
-use crate::torrent::user_interface::ui_handler;
 use crate::torrent::{
     client::{
-        medatada_analyzer::create_torrent, peers_comunication,
+        entry_files_management,
+        medatada_analyzer::create_torrent,
+        peers_communication::{self, local_peer_communicator::generate_peer_id},
         tracker_comunication::http_handler::communicate_with_tracker,
     },
-    data::config_file_data::ConfigFileData,
-    data::torrent_status::TorrentStatus,
-    local_peer_communicator::generate_peer_id,
-    logger::Logger,
+    data::{config_file_data::ConfigFileData, torrent_status::TorrentStatus},
+    logger::{self, Logger},
+    user_interface::{constants::MessageUI, ui_interfaz},
 };
-use crate::torrent::{entry_files_management, logger};
 use core::fmt;
 use gtk::glib::Sender as UiSender;
 use log::{debug, info, trace};
-use std::error::Error;
-use std::sync::mpsc::Sender as LoggerSender;
-use std::sync::{Arc, RwLock};
-use std::thread::{self, JoinHandle};
+use std::{
+    error::Error,
+    sync::{mpsc::Sender as LoggerSender, Arc, RwLock},
+    thread::{self, JoinHandle},
+};
 
-use super::client::medatada_analyzer::MetadataError;
-use super::client::tracker_comunication::http_handler::ErrorMsgHttp;
-use super::data::torrent_file_data::TorrentFileData;
-use super::local_peer_communicator::InteractionHandlerError;
-use super::logger::LogError;
-use super::pieces_handler::PiecesAssemblerError;
-use super::user_interface::ui_handler::UiError;
+use super::{
+    client::{
+        medatada_analyzer::MetadataError,
+        peers_communication::local_peer_communicator::InteractionHandlerError,
+        pieces_assembling_handler::PiecesAssemblerError,
+        tracker_comunication::http_handler::ErrorMsgHttp,
+    },
+    data::torrent_file_data::TorrentFileData,
+    logger::LogError,
+    user_interface::ui_interfaz::UiError,
+};
 
 #[derive(PartialEq, Debug)]
 pub enum TorrentHandlerError {
@@ -36,10 +39,11 @@ pub enum TorrentHandlerError {
     ClosingLogger(String),
     CommunicationWithTracker(ErrorMsgHttp),
     CommunicationWithPeers(InteractionHandlerError),
-    PiecesHandler(PiecesAssemblerError),
     JoinHandle(String),
     SetGlobalShutDown(String),
     ReadingShutDownField(String),
+    AssemblingTarget(String),
+    PiecesHandler(PiecesAssemblerError),
 }
 
 impl fmt::Display for TorrentHandlerError {
@@ -68,29 +72,26 @@ fn handle_torrent(
 
     info!("Iniciando comunicacion con tracker");
     let tracker_response = communicate_with_tracker(&torrent_file, config_data, peer_id.clone())
-        .map_err(|err| TorrentHandlerError::CommunicationWithTracker(err))?;
+        .map_err(TorrentHandlerError::CommunicationWithTracker)?;
     info!("Comunicacion con el tracker exitosa");
 
-    ui_handler::update_torrent_information(
-        &ui_sender,
+    ui_interfaz::update_torrent_information(
+        ui_sender,
         &torrent_file,
         &tracker_response,
         &torrent_status,
     )
-    .map_err(|err| TorrentHandlerError::UserInterface(err))?;
+    .map_err(TorrentHandlerError::UserInterface)?;
 
     info!("Inicio de comunicacion con peers.");
-    peers_comunication::handler::handle_general_interaction_with_peers(
-        &torrent_file,
-        &tracker_response,
-        torrent_status,
-        &config_data,
-        peer_id,
+    peers_communication::handler_communication::handle_general_interaction_with_peers(
+        (&torrent_file, &tracker_response, config_data, peer_id),
         global_shut_down.clone(),
         logger_sender,
+        torrent_status,
         ui_sender,
     )
-    .map_err(|err| TorrentHandlerError::CommunicationWithPeers(err))?;
+    .map_err(TorrentHandlerError::CommunicationWithPeers)?;
     Ok(())
 }
 
@@ -130,7 +131,7 @@ fn is_shut_down_set(global_shut_down: &Arc<RwLock<bool>>) -> Result<bool, Torren
     let global_shut_down = global_shut_down
         .read()
         .map_err(|error| TorrentHandlerError::ReadingShutDownField(format!("{:?}", error)))?;
-    return Ok(*global_shut_down);
+    Ok(*global_shut_down)
 }
 
 fn set_up_logger(
@@ -141,10 +142,10 @@ fn set_up_logger(
         config_data.get_log_path(),
         torrent_file.get_torrent_representative_name(),
     )
-    .map_err(|err| TorrentHandlerError::CreatingLogger(err))?;
-    Ok(logger
+    .map_err(TorrentHandlerError::CreatingLogger)?;
+    logger
         .init_logger()
-        .map_err(|err| TorrentHandlerError::CreatingLogger(err))?)
+        .map_err(TorrentHandlerError::CreatingLogger)
 }
 
 fn handle_list_of_torrents(
@@ -169,20 +170,19 @@ fn handle_list_of_torrents(
         debug!("Archivo ingresado: {}", file_path);
         info!("Archivo ingresado con exito");
 
-        let torrent_file = match create_torrent(&file_path)
-            .map_err(|err| TorrentHandlerError::CreatingTorrent(err))
-        {
-            Ok(torrent_file) => torrent_file,
-            Err(error) => {
-                info!("Error al querer crear el torrent {}: {}", file_path, error);
-                current_torrent_index += 1;
-                continue;
-            }
-        };
+        let torrent_file =
+            match create_torrent(&file_path).map_err(TorrentHandlerError::CreatingTorrent) {
+                Ok(torrent_file) => torrent_file,
+                Err(error) => {
+                    info!("Error al querer crear el torrent {}: {}", file_path, error);
+                    current_torrent_index += 1;
+                    continue;
+                }
+            };
         trace!("Almacenada y parseada información de metadata");
 
-        ui_handler::add_torrent(&ui_sender, &torrent_file)
-            .map_err(|err| TorrentHandlerError::UserInterface(err))?;
+        ui_interfaz::add_torrent(&ui_sender, &torrent_file)
+            .map_err(TorrentHandlerError::UserInterface)?;
 
         let torrent_name = torrent_file.get_torrent_representative_name();
         let (logger_sender, logger_handler) = match set_up_logger(&config_data, &torrent_file) {
@@ -215,7 +215,7 @@ fn handle_list_of_torrents(
     })
 }
 
-fn generate_file_lists(files_list: &Vec<String>) -> (Vec<String>, Vec<String>) {
+fn generate_file_lists(files_list: &[String]) -> (Vec<String>, Vec<String>) {
     let mut files_list_1: Vec<String> = vec![];
     let mut files_list_2: Vec<String> = vec![];
 
