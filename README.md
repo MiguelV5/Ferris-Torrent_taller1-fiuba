@@ -1,7 +1,16 @@
 # Proyecto Taller de Programación I (1C-2022) - FA-torrent
 
 <p align="center">
+____________________________________________________________________________________________________________________________
+
+<br>
+<br>
+  <img src="https://www.estudiaradistancia.com.ar/logos/original/logo-universidad-de-buenos-aires.webp" height=150 />
+  <img  src="https://confedi.org.ar/wp-content/uploads/2020/09/fiuba_logo.jpg" height="150">
+<br>
+<br>
   <img src="https://aws1.discourse-cdn.com/business5/uploads/rust_lang/original/2X/9/9f76ef5e791e27deaaafbca2a3bea35d63e165c8.gif" />
+____________________________________________________________________________________________________________________________
 </p>
 
 ## Grupo - Ferris Appreciators
@@ -17,35 +26,53 @@
 
 Haga click [aquí](link) para ingresar a la presentación -->
 
-### Objetivo del Proyecto
+## Objetivo del Proyecto
 
 El objetivo del proyecto es implementar un Cliente de BitTorrent con funcionalidades acotadas, detalladas [aquí](https://taller-1-fiuba-rust.github.io/proyecto/22C1/proyecto.html).
 
-En este momento el proyecto sigue en desarrollo.
+## Funcionalidad soportada
 
-### Funcionalidad soportada actualmente
+### Primera versión (checkpoint release)
 
-En su versión actual, el cliente soporta:
-
-- Recibir por linea de comandos la ruta de un archivo torrent
+- Recibir por linea de comandos la ruta de un archivo .torrent
 - Dicho .torrent es leído y decodificado según el estándar y su información almacenada.
 - Se conecta al Tracker obtenido en el .torrent y se comunica con el mismo, decodifica su respuesta y obtiene una lista de peers.
 - Se conecta con un peer y realiza la comunicación completa con el mismo para poder descargar una pieza del torrent.
 - La pieza descargada es validada internamente, pero puede verificarse también por medio del script sha1sum de linux.
 
-<!-- ### Ejecución
+### Segunda versión
 
-Por medio de:
+- Permite recibir por linea de comandos la ruta de uno o más archivos ".torrent"; o un la ruta a un directorio con ellos.
+- Se ensamblan las piezas de cada torrent para obtener el archivo completo.
+- Funciona como server, es decir, responde a requests de piezas.
+- Cuenta con interfaz gráfica.
+- Cuénta con un logger en archivos que indica cuándo se descargan las piezas (y adicionalmente se loggean errores importantes).
+- Se pueden customizar el puerto en el que se escuchan peticiones, directorio de descargas y de logs mediante un archivo config.txt
+- Puede descargar más de un torrent concurrentemente, y por cada uno de esos torrents puede descargar más de una pieza de la misma
+
+## Ejecución
+
+### Con logs por consola (Recomendado)
+
+#### Con log por consola de información básica de descarga
 
 ```bash
-cargo run <ARCHIVO_TORRENT>
-``` -->
+RUST_LOG=info cargo run <archivos_torrent/path_a_directorio_con_torrents>
+```
 
-[comment]: # (POSTERIORMENTE CAMBIAR ESTO^ A: <ARCHIVO_TORRENT/DIRECTORIO_CON_ARCHIVOS_TORRENT>)
+#### Con log por consola de información avanzada de descarga (detalles adicionales como respuesta de tracker, etc)
+
+```bash
+RUST_LOG=trace cargo run <archivos_torrent/path_a_directorio_con_torrents>
+```
+
+### Sin logs por consola
+
+```bash
+cargo run <archivos_torrent/path_a_directorio_con_torrents>
+```
 
 [comment]: # (La linea siguiente es para descomentar despues cuando se tenga la funcionalidad)
-
-<!-- El cliente soporta ser configurado en cuanto al directorio destino de la descarga y al archivo en el que se desee loggear por medio de la modificación del archivo configuration.txt, de la forma: destination_path:<path_deseado>  logging_path:<path_deseado>  -->
 
 <!-- ### Diagramas
 

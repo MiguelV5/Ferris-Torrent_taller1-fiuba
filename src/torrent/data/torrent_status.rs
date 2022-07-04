@@ -215,7 +215,16 @@ impl TorrentStatus {
             "Nuevo estado de la pieza {}: {:?}",
             piece_index, self.pieces_availability[piece_index]
         );
+
+        if self.all_pieces_completed() {
+            self.event = StateOfDownload::Completed;
+        }
+
         Ok(())
+    }
+
+    pub fn is_torrent_state_set_as_completed(&self) -> bool {
+        self.event == StateOfDownload::Completed
     }
 
     /// Funcion que busca una nueva pieza que quiera pedir posteriormente, y
@@ -392,7 +401,7 @@ mod test_torrent_status {
                 role: PeerRole::Client,
                 logger_sender: mpsc::channel().0,
                 ui_sender: ui_sender,
-                time: SystemTime::now(),
+                clock: SystemTime::now(),
             };
             Ok((torrent_status, local_peer))
         }
@@ -441,7 +450,7 @@ mod test_torrent_status {
                 role: PeerRole::Client,
                 logger_sender: mpsc::channel().0,
                 ui_sender: ui_sender,
-                time: SystemTime::now(),
+                clock: SystemTime::now(),
             };
             Ok((torrent_status, local_peer))
         }
@@ -492,7 +501,7 @@ mod test_torrent_status {
                 role: PeerRole::Client,
                 logger_sender: mpsc::channel().0,
                 ui_sender: ui_sender,
-                time: SystemTime::now(),
+                clock: SystemTime::now(),
             };
 
             Ok((torrent_status, local_peer))

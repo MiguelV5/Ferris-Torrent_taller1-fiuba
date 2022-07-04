@@ -474,7 +474,7 @@ impl InfoBox {
         let download_label = self.labels.get(DOWNLOAD_ID);
         match download_label {
             Some(label) => {
-                let download = (download * f64::from(100)).round() / f64::from(100000);
+                let download = (download).round() / f64::from(1000);
                 let mut new_download = String::from(DOWNLOAD_LABEL);
                 new_download.push_str(download.to_string().as_str());
                 new_download.push_str(KILOBYTESPERSEC);
@@ -488,7 +488,7 @@ impl InfoBox {
         let upload_label = self.labels.get(UPLOAD_ID);
         match upload_label {
             Some(label) => {
-                let upload = (upload * f64::from(100)).round() / f64::from(100000);
+                let upload = (upload).round() / f64::from(1000);
                 let mut new_upload = String::from(UPLOAD_LABEL);
                 new_upload.push_str(upload.to_string().as_str());
                 new_upload.push_str(KILOBYTESPERSEC);

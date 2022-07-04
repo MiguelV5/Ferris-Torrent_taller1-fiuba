@@ -76,8 +76,8 @@ pub struct TorrentFileData {
     pub sha1_pieces: Vec<u8>,
     pub sha1_info_hash: Vec<u8>,
     pub piece_length: u64,
-    pub total_length: u64,
     pub total_amount_of_pieces: usize,
+    pub total_length: u64,
     pub target_files_data: TargetFilesData,
 }
 

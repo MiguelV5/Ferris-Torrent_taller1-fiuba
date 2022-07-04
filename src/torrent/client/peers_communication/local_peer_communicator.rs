@@ -50,7 +50,7 @@ pub struct LocalPeerCommunicator {
     pub role: PeerRole,
     pub logger_sender: LoggerSender<String>,
     pub ui_sender: UiSender<MessageUI>,
-    pub time: SystemTime,
+    pub clock: SystemTime,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -104,6 +104,8 @@ pub enum InteractionHandlerError {
     SendingRequestedBlock(String),
     LockingTorrentStatus(String),
     JoinHandle(String),
+    WritingShutDownField(String),
+
     ReadingShutDownField(String),
     UpdatingWasRequestedField(String),
     LogError(String),
@@ -376,7 +378,7 @@ impl LocalPeerCommunicator {
             role: PeerRole::Client,
             logger_sender,
             ui_sender,
-            time,
+            clock: time,
         })
     }
 
@@ -429,7 +431,7 @@ impl LocalPeerCommunicator {
             role: PeerRole::Client,
             logger_sender,
             ui_sender,
-            time,
+            clock: time,
         })
     }
 
@@ -479,7 +481,7 @@ impl LocalPeerCommunicator {
                     format!("{:?}", error),
                 ))
             })?;
-            if torrent_status.all_pieces_completed() && !self.peer_interested() {
+            if torrent_status.is_torrent_state_set_as_completed() && !self.peer_interested() {
                 return Ok(InteractionHandlerStatus::FinishInteraction);
             } else if !self.am_interested() && !self.peer_interested() {
                 info!("Se busca un nuevo peer al cual pedirle piezas");
@@ -773,7 +775,7 @@ impl LocalPeerCommunicator {
 
         self.check_piece(torrent_file_data, &mut torrent_status, path, piece_index)?;
 
-        let download_duration = self.time.elapsed().map_err(|err| {
+        let download_duration = self.clock.elapsed().map_err(|err| {
             InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::CalculatingTime(
                 format!("{}", err),
             ))
@@ -1147,7 +1149,7 @@ impl LocalPeerCommunicator {
 
         torrent_status.increment_uploaded_counter(amount_of_bytes.into());
 
-        let upload_duration = self.time.elapsed().map_err(|err| {
+        let upload_duration = self.clock.elapsed().map_err(|err| {
             InteractionHandlerErrorKind::Recoverable(InteractionHandlerError::CalculatingTime(
                 format!("{}", err),
             ))
@@ -1340,7 +1342,7 @@ mod test_client {
             role: PeerRole::Client,
             logger_sender: logger_sender,
             ui_sender: ui_sender,
-            time: SystemTime::now(),
+            clock: SystemTime::now(),
         };
         Ok((
             tracker_response,
@@ -1437,7 +1439,7 @@ mod test_client {
             role: PeerRole::Client,
             logger_sender: logger_sender,
             ui_sender: ui_sender,
-            time: SystemTime::now(),
+            clock: SystemTime::now(),
         };
         Ok((
             tracker_response,
@@ -1532,7 +1534,7 @@ mod test_client {
             role: PeerRole::Client,
             logger_sender: logger_sender,
             ui_sender: ui_sender,
-            time: SystemTime::now(),
+            clock: SystemTime::now(),
         };
         Ok((
             tracker_response,
@@ -1627,7 +1629,7 @@ mod test_client {
             role: PeerRole::Client,
             logger_sender: logger_sender,
             ui_sender: ui_sender,
-            time: SystemTime::now(),
+            clock: SystemTime::now(),
         };
         Ok((
             tracker_response,

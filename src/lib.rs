@@ -4,15 +4,25 @@
 //!
 //! El objetivo del proyecto es implementar un Cliente de BitTorrent con funcionalidades acotadas, detalladas [aquí](https://taller-1-fiuba-rust.github.io/proyecto/22C1/proyecto.html).
 //!
-//! En este momento el proyecto sigue en desarrollo.
 //!
-//! En su versión actual, el cliente soporta:
+//! Primera versión (checkpoint release):
 //!
 //! - Recibir por linea de comandos la ruta de un archivo .torrent
 //! - Dicho .torrent es leído y decodificado según el estándar y su información almacenada.
 //! - Se conecta al Tracker obtenido en el .torrent y se comunica con el mismo, decodifica su respuesta y obtiene una lista de peers.
 //! - Se conecta con un peer y realiza la comunicación completa con el mismo para poder descargar una pieza del torrent.
 //! - La pieza descargada es validada internamente, pero puede verificarse también por medio del script sha1sum de linux.
+//!
+//! Segunda versión:
+//!
+//! - Permite recibir por linea de comandos la ruta de uno o más archivos ".torrent"; o un la ruta a un directorio con ellos.
+//! - Se ensamblan las piezas de cada torrent para obtener el archivo completo.
+//! - Funciona como server, es decir, responde a requests de piezas.
+//! - Cuenta con interfaz gráfica.
+//! - Cuénta con un logger en archivos que indica cuándo se descargan las piezas (y adicionalmente se loggean errores importantes).
+//! - Se pueden customizar el puerto en el que se escuchan peticiones, directorio de descargas y de logs mediante un archivo config.txt
+//! - Puede descargar más de un torrent concurrentemente, y por cada uno de esos torrents puede descargar más de una pieza de la misma forma. A su vez puede ser server de otros peers.
+//!
 //!
 
 pub mod torrent;

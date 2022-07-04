@@ -323,7 +323,7 @@ mod test_msg_sender {
             role: PeerRole::Client,
             logger_sender: mpsc::channel().0,
             ui_sender: ui_sender,
-            time: SystemTime::now(),
+            clock: SystemTime::now(),
         };
         Ok((tracker_response, torrent_status, torrent_file, local_peer))
     }

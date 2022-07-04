@@ -1,9 +1,8 @@
 use crate::torrent::{
     client::{
-        entry_files_management,
-        medatada_analyzer::create_torrent,
+        entry_files_management, medatada_analyzer,
         peers_communication::{self, local_peer_communicator::generate_peer_id},
-        tracker_comunication::http_handler::communicate_with_tracker,
+        tracker_comunication::http_handler,
     },
     data::{config_file_data::ConfigFileData, torrent_status::TorrentStatus},
     logger::{self, Logger},
@@ -71,8 +70,9 @@ fn handle_torrent(
     let peer_id = generate_peer_id();
 
     info!("Iniciando comunicacion con tracker");
-    let tracker_response = communicate_with_tracker(&torrent_file, config_data, peer_id.clone())
-        .map_err(TorrentHandlerError::CommunicationWithTracker)?;
+    let tracker_response =
+        http_handler::communicate_with_tracker(&torrent_file, config_data, peer_id.clone())
+            .map_err(TorrentHandlerError::CommunicationWithTracker)?;
     info!("Comunicacion con el tracker exitosa");
 
     ui_sender_handler::update_torrent_information(
@@ -86,9 +86,9 @@ fn handle_torrent(
     info!("Inicio de comunicacion con peers.");
     peers_communication::handler_communication::handle_general_interaction_with_peers(
         (&torrent_file, &tracker_response, config_data, peer_id),
+        torrent_status,
         global_shut_down.clone(),
         logger_sender,
-        torrent_status,
         ui_sender,
     )
     .map_err(TorrentHandlerError::CommunicationWithPeers)?;
@@ -170,15 +170,16 @@ fn handle_list_of_torrents(
         debug!("Archivo ingresado: {}", file_path);
         info!("Archivo ingresado con exito");
 
-        let torrent_file =
-            match create_torrent(&file_path).map_err(TorrentHandlerError::CreatingTorrent) {
-                Ok(torrent_file) => torrent_file,
-                Err(error) => {
-                    info!("Error al querer crear el torrent {}: {}", file_path, error);
-                    current_torrent_index += 1;
-                    continue;
-                }
-            };
+        let torrent_file = match medatada_analyzer::create_torrent(&file_path)
+            .map_err(TorrentHandlerError::CreatingTorrent)
+        {
+            Ok(torrent_file) => torrent_file,
+            Err(error) => {
+                info!("Error al querer crear el torrent {}: {}", file_path, error);
+                current_torrent_index += 1;
+                continue;
+            }
+        };
         trace!("Almacenada y parseada información de metadata");
 
         ui_sender_handler::add_torrent(&ui_sender, &torrent_file)
@@ -215,7 +216,9 @@ fn handle_list_of_torrents(
     })
 }
 
-fn generate_file_lists(files_list: &[String]) -> (Vec<String>, Vec<String>) {
+fn generate_file_lists() -> Result<(Vec<String>, Vec<String>), Box<dyn Error>> {
+    let files_list = entry_files_management::create_list_files()?;
+
     let mut files_list_1: Vec<String> = vec![];
     let mut files_list_2: Vec<String> = vec![];
 
@@ -226,7 +229,7 @@ fn generate_file_lists(files_list: &[String]) -> (Vec<String>, Vec<String>) {
             files_list_2.push(file.clone())
         }
     }
-    (files_list_1, files_list_2)
+    Ok((files_list_1, files_list_2))
 }
 
 pub fn handle_all_torrents(
@@ -236,11 +239,8 @@ pub fn handle_all_torrents(
     let mut config_data = ConfigFileData::new("config.txt")?;
     info!("Archivo de configuración leido y parseado correctamente");
 
-    let files_list = entry_files_management::create_list_files()?;
-
+    let (files_list_1, files_list_2) = generate_file_lists()?;
     info!("Archivo ingresado con exito");
-
-    let (files_list_1, files_list_2) = generate_file_lists(&files_list);
 
     let torrent_handler_1 = handle_list_of_torrents(
         files_list_1,
