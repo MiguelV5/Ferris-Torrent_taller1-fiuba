@@ -1,17 +1,5 @@
-[package]
-name = "fa_torrent"
-version = "2.0.1"
-edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+members = ["ferris_torrent","ferris_tracker", "shared"]
 
-[dependencies]
-sha1 = "0.10.1"
-native-tls = "0.2.10"
-rand = "0.8.4"
-log = "0.4.17"
-pretty_env_logger = "0.4.0"
-gtk = { version = "0.4.8", package = "gtk4" }
 
-[target.'cfg(unix)'.dependencies]
-openssl = { version = "0.10.40", features = ["vendored"] }
