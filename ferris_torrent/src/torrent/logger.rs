@@ -9,12 +9,12 @@ use std::{
 
 use log::error;
 
-#[derive(Debug, PartialEq, Clone, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Logger {
     log_path: String,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum LogError {
     CanNotCreateFile,
     CanNotWrite,

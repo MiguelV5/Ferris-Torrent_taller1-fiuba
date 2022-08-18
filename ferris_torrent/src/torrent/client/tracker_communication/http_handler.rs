@@ -17,7 +17,7 @@ use crate::torrent::data::{
 
 use shared::parsers::{
     bencoding::{self, values::ValuesBencoding},
-    url_encoder,
+    urlencoding::{self},
 };
 
 use log::{debug, error, trace};
@@ -37,7 +37,7 @@ pub trait ReadAndWrite: Read + Write {}
 impl<T: Read + Write> ReadAndWrite for T {}
 
 ///Enumerado que representa los tipos de error que pueden surgir en comunicación con tracker
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ErrorMsgHttp {
     NoAnnounce,
     NoInfoHash,
@@ -84,7 +84,7 @@ fn find_index_msg(response: &[u8], size: usize, end_line: &[u8]) -> Option<usize
 }
 
 fn init_info_hash(vec_sha1: Vec<u8>) -> String {
-    let info_hash = url_encoder::from_string_bytes(vec_sha1);
+    let info_hash = urlencoding::encoder::from_string_bytes(vec_sha1);
     vec_u8_to_string(&info_hash)
 }
 
@@ -100,13 +100,13 @@ fn init_host(tracker: String) -> ResultMsg<String> {
             match find_index_msg(&u8_tracker[first..], ONE, TWO_POINTS) {
                 Some(pos) => {
                     let last = pos + first;
-                    Ok(vec_u8_to_string(&u8_tracker[first..last].to_vec()))
+                    Ok(vec_u8_to_string(&u8_tracker[first..last]))
                 }
                 //Si no hay ":" quito todo lo que haya por delante del "/"
                 None => match find_index_msg(&u8_tracker[first..], ONE, LAST_SLASH) {
                     Some(pos) => {
                         let last = pos + first;
-                        Ok(vec_u8_to_string(&u8_tracker[first..last].to_vec()))
+                        Ok(vec_u8_to_string(&u8_tracker[first..last]))
                     }
                     None => Err(ErrorMsgHttp::NoAnnounce),
                 },
@@ -126,7 +126,7 @@ fn init_get(tracker: String) -> ResultMsg<String> {
             match find_index_msg(&u8_tracker[first..], ONE, LAST_SLASH) {
                 Some(pos) => {
                     let getter = pos + first;
-                    Ok(vec_u8_to_string(&u8_tracker[getter..].to_vec()))
+                    Ok(vec_u8_to_string(&u8_tracker[getter..]))
                 }
                 None => Ok(String::from(ANNOUNCE)),
             }

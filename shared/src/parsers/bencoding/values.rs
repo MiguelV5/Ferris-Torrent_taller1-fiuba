@@ -4,7 +4,7 @@
 use std::{collections::HashMap, error::Error, fmt};
 
 ///Enumerado de los distintos tipos que puede haber en el bencoding
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ValuesBencoding {
     String(Vec<u8>),
     Integer(i64),
@@ -13,7 +13,7 @@ pub enum ValuesBencoding {
 }
 
 ///Enumerado de los distos tipos que pueden dar error con su descripcion de error dentro
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum ErrorBencoding {
     String(ErrorType),
     Integer(ErrorType),
@@ -22,7 +22,7 @@ pub enum ErrorBencoding {
 }
 
 ///Enumerado de los posibles errores al desencodear
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum ErrorType {
     Format,
     Long,

@@ -7,7 +7,7 @@ use shared::parsers::p2p::{self, constants::TOTAL_NUM_OF_BYTES_HANDSHAKE, messag
 use core::fmt;
 use std::{error::Error, io::Read, net::TcpStream};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 /// Representa un tipo de error en la recepcion de mensajes P2P
 pub enum MsgReceiverError {
     InternalParsing(String),

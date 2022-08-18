@@ -45,7 +45,7 @@ pub const DEFAULT_PIECE_LENGHT: usize = 34000;
 pub const DEFAULT_AMOUNT_OF_PIECES: usize = 2;
 pub const DEFAULT_LAST_PIECE_LENGHT: usize = 6000;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TestingError {
     ClientPeerFieldsInvalidAccess(String),
     ReadingTorrentStatus(String),

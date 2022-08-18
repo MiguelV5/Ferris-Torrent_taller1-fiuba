@@ -22,7 +22,7 @@ const PEER_ID: &str = "peer id";
 const IP: &str = "ip";
 const PORT: &str = "port";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 ///Enumerado que representa la seccion en la que el error puede surgir
 pub enum Section {
     Interval,
@@ -34,7 +34,7 @@ pub enum Section {
     Port,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 ///Enumerado que representa la seccion en la que el error puede surgir al analizar una response
 pub enum ResponseError {
     NotFound(Section),
@@ -42,7 +42,7 @@ pub enum ResponseError {
     ConvertIp(Section),
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct PeerDataFromTrackerResponse {
     pub peer_id: Option<Vec<u8>>,
     pub peer_address: SocketAddr,
@@ -94,7 +94,7 @@ impl PeerDataFromTrackerResponse {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct TrackerResponseData {
     pub interval: u64,
     pub complete: u64,

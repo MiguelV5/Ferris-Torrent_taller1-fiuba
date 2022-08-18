@@ -8,7 +8,7 @@ use crate::torrent::data::{
 };
 use gtk::glib::Sender;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum UiError {
     AddingTorrent(String),
     UpdatingTorrentInformation(String),

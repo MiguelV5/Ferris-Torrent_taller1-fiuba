@@ -57,7 +57,7 @@ pub struct LocalPeerCommunicator {
 }
 
 ///Rol que puede tomar un local peer communicator dentro de la interaccion con peers externos
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum PeerRole {
     Client,
     Server,
@@ -74,7 +74,7 @@ enum InterestOfReceivedPieceMsg {
 //========================================================
 
 /// Errores del tipo recuperables e irrecuperables para saber si abortar o no la descarga de un torrent.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum InteractionHandlerErrorKind {
     Recoverable(InteractionHandlerError),
     Unrecoverable(InteractionHandlerError),
@@ -89,7 +89,7 @@ impl fmt::Display for InteractionHandlerErrorKind {
 impl Error for InteractionHandlerErrorKind {}
 
 /// Representa un tipo de error en la comunicación general P2P con un peer individual.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum InteractionHandlerError {
     ConectingWithPeer(String),
     RestartingDownload(String),
@@ -126,7 +126,7 @@ impl fmt::Display for InteractionHandlerError {
 
 impl Error for InteractionHandlerError {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 /// Representa un tipo de estado de interaccion para saber si se debe
 /// continuar o finalizar la misma
 pub enum InteractionHandlerStatus {
@@ -1297,7 +1297,7 @@ mod test_client {
         message::{P2PMessage, PieceStatus},
     };
 
-    #[derive(PartialEq, Debug, Clone)]
+    #[derive(PartialEq, Eq, Debug, Clone)]
     pub enum TestingError {
         ClientPeerFieldsInvalidAccess(String),
     }

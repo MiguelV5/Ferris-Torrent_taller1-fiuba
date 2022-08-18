@@ -1,6 +1,6 @@
 use std::{error::Error, fmt};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 /// Representa el estado de una pieza para uso en mensaje P2P Bitfield
 /// (Teniendo un vector de PieceStatuses se puede representar el Bitfield de forma comoda)
 pub enum PieceStatus {
@@ -14,7 +14,7 @@ pub enum PieceStatus {
     },
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 /// Representa un mensaje en general de comunicación P2P, donde cada variante es un mensaje distinto con
 /// información asociada.
 pub enum P2PMessage {
@@ -54,7 +54,7 @@ pub enum P2PMessage {
     },
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 /// Representa un tipo de error en la DECODIFICACION de mensajes P2P
 pub enum P2PMessageDecodingError {
     ByteAmount(String),
@@ -72,7 +72,7 @@ impl fmt::Display for P2PMessageDecodingError {
 
 impl Error for P2PMessageDecodingError {}
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 /// Representa un tipo de error en la ENCODIFICACION de mensajes P2P
 pub enum P2PMessageEncodingError {
     FromUsizeToU32Error(String),

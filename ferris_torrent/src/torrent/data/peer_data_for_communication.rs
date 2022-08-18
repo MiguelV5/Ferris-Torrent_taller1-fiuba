@@ -9,7 +9,7 @@ use super::torrent_file_data::TorrentFileData;
 
 use shared::parsers::p2p::message::PieceStatus;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum PeerDataForP2PCommunicationError {
     InvalidPieceIndexAtBitfield(String),
     CreatingPeerName(String),
@@ -23,7 +23,7 @@ impl fmt::Display for PeerDataForP2PCommunicationError {
 
 impl Error for PeerDataForP2PCommunicationError {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 /// Representa la info importante de un peer al comunicarse con él de forma
 /// directa por sockets
 pub struct PeerDataForP2PCommunication {

@@ -13,14 +13,14 @@ const WHITESPACE: &str = " ";
 
 type ResultConfig<T> = Result<T, ConfigFileDataError>;
 
-#[derive(Debug, PartialEq, Clone, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ConfigFileData {
     pub port: u32,
     pub log_path: String,
     pub download_path: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ConfigFileDataError {
     FileNotFound,
     BadSize,

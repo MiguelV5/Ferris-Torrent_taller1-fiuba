@@ -24,7 +24,7 @@ const NAME: &str = "name";
 const PIECES: &str = "pieces";
 const PATH: &str = "path";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 ///Enumerado que representa la seccion en la que el error puede surgir
 pub enum Section {
     Announce,
@@ -39,7 +39,7 @@ pub enum Section {
     FilesData,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 ///Enumerado que representa el tipo de error que puede surgir, que por dentreo tendra
 /// su seccion correspondiente
 pub enum TorrentFileDataError {
@@ -51,13 +51,13 @@ pub enum TorrentFileDataError {
     CheckingRequestBlock(String),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FileData {
     pub path: String,
     pub file_length: u64,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TargetFilesData {
     SingleFile {
         file_name: String,
@@ -69,7 +69,7 @@ pub enum TargetFilesData {
     },
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct TorrentFileData {
     pub url_tracker_main: String,
     pub url_tracker_list: Vec<String>,

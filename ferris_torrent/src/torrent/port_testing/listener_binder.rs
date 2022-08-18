@@ -8,7 +8,7 @@ pub const LOCALHOST: &str = "127.0.0.1";
 pub const STARTING_PORT: u16 = 8080;
 pub const MAX_PORT_TO_TRY_BIND: u16 = 9080;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum PortBindingError {
     ReachedMaxPortWithoutFindingAnAvailableOne,
 }

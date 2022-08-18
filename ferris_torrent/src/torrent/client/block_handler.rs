@@ -16,7 +16,7 @@ use std::{
 };
 
 /// Representa un error de manejo de almacenamiento de bloque.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum BlockHandlerError {
     StoringBlock(String),
     CheckingSha1Piece(String),

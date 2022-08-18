@@ -11,7 +11,7 @@ use std::{
     io::{Read, Write},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PiecesAssemblerError {
     SetUpDownloadDirectory(String),
     ReadingAPieceFile(String),

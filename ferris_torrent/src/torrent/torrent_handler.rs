@@ -34,7 +34,7 @@ use super::{
 };
 
 /// Representa un tipo de error en el manejo de archivos .torrent
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum TorrentHandlerError {
     CreatingTorrent(MetadataError),
     UserInterface(UiError),

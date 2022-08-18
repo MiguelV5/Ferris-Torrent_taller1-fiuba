@@ -17,7 +17,7 @@ type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 
 const TORRENT: &str = "torrent";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 /// Representa un error al analizar la metadata
 pub enum MetadataError {
     FileNotFound,

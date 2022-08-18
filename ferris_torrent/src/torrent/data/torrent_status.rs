@@ -15,7 +15,7 @@ use shared::parsers::p2p::message::PieceStatus;
 
 use super::torrent_file_data::TorrentFileData;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 /// Representa el estado de la descarga COMPLETA del torrent
 pub enum TorrentStatusError {
     UpdatingPieceStatus(String),
@@ -32,7 +32,7 @@ impl fmt::Display for TorrentStatusError {
 
 impl Error for TorrentStatusError {}
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 /// Representa el estado de la descarga COMPLETA del torrent
 pub enum StateOfDownload {
     Started,
@@ -40,7 +40,7 @@ pub enum StateOfDownload {
     Stopped,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 /// Representa la data actual de como va la descarga de un torrent
 pub struct TorrentStatus {
     pub uploaded: u64,
