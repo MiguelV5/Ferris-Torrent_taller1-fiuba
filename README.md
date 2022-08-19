@@ -1,10 +1,10 @@
 # Proyecto Taller de Programación I (1C-2022) - FA-torrent
 
-<p align="center">
 
 ---
 
 
+<p align="center">
 <br>
 <br>
   <img src="https://www.estudiaradistancia.com.ar/logos/original/logo-universidad-de-buenos-aires.webp" height=150 />
@@ -12,10 +12,10 @@
 <br>
 <br>
   <img src="https://aws1.discourse-cdn.com/business5/uploads/rust_lang/original/2X/9/9f76ef5e791e27deaaafbca2a3bea35d63e165c8.gif" />
+</p>
 
 ---
 
-</p>
 
 ## Grupo - Ferris Appreciators
 
@@ -40,7 +40,6 @@ Se tiene como objetivo de funcionalidad agregada implementar un Tracker HTTP de 
 
 ## Ejecución
 
-***(WIP)***
 
 En general, los distintos `<tipo_de_log>` son: `info, debug, trace`.
 

@@ -1270,7 +1270,7 @@ impl LocalPeerCommunicator {
 }
 
 #[cfg(test)]
-mod test_client {
+mod test_local_peer {
     use gtk::glib;
 
     use super::*;
@@ -1283,18 +1283,18 @@ mod test_client {
         thread,
     };
 
-    use crate::torrent::{
-        data::{
-            torrent_file_data::{TargetFilesData, TorrentFileData},
-            torrent_status::{StateOfDownload, TorrentStatus},
-            tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
-        },
-        port_testing::listener_binder::*,
+    use crate::torrent::data::{
+        torrent_file_data::{TargetFilesData, TorrentFileData},
+        torrent_status::{StateOfDownload, TorrentStatus},
+        tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
     };
 
-    use shared::parsers::p2p::{
-        constants::PSTR_STRING_HANDSHAKE,
-        message::{P2PMessage, PieceStatus},
+    use shared::{
+        parsers::p2p::{
+            constants::PSTR_STRING_HANDSHAKE,
+            message::{P2PMessage, PieceStatus},
+        },
+        port_binder::listener_binder::*,
     };
 
     #[derive(PartialEq, Eq, Debug, Clone)]
@@ -1328,7 +1328,7 @@ mod test_client {
         ),
         Box<dyn Error>,
     > {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
         let handler = thread::spawn(move || listener.accept());
 
@@ -1412,7 +1412,7 @@ mod test_client {
         ),
         Box<dyn Error>,
     > {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
         let handler = thread::spawn(move || listener.accept());
 
@@ -1509,7 +1509,7 @@ mod test_client {
         ),
         Box<dyn Error>,
     > {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
         let handler = thread::spawn(move || listener.accept());
 
@@ -2629,7 +2629,8 @@ mod test_client {
 
         #[test]
         fn local_peer_does_not_have_the_requested_block_error() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 1)?;
             let (_, _) = listener.accept()?;
@@ -2671,7 +2672,8 @@ mod test_client {
 
         #[test]
         fn peer_who_request_block_is_chocked_error() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 2)?;
             let (_, _) = listener.accept()?;
@@ -2714,7 +2716,8 @@ mod test_client {
         #[test]
         fn beginning_byte_index_is_bigger_than_the_piece_length_error() -> Result<(), Box<dyn Error>>
         {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 3)?;
             let (_, _) = listener.accept()?;
@@ -2757,7 +2760,8 @@ mod test_client {
 
         #[test]
         fn invalid_requested_amount_of_bytes_error() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 4)?;
             let (_, _) = listener.accept()?;
@@ -2800,7 +2804,8 @@ mod test_client {
 
         #[test]
         fn requested_amount_of_bytes_is_bigger_than_16kbytes_error() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 5)?;
             let (_, _) = listener.accept()?;
@@ -2843,7 +2848,8 @@ mod test_client {
 
         #[test]
         fn local_peer_sends_a_request_ok() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let (_, torrent_status, torrent_file_data, mut local_peer, _log_receiver, _ui_receiver) =
                 create_default_client_with_a_piece_for_requests(address, 6)?;
             let (mut external_stream, _) = listener.accept()?;

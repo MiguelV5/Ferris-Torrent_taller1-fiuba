@@ -104,7 +104,7 @@ pub fn create_torrent(torrent_path: &str) -> Result<TorrentFileData, MetadataErr
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_metadata_analyzer {
     use super::*;
     use shared::parsers::bencoding;
 

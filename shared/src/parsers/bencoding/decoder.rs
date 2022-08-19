@@ -229,7 +229,7 @@ pub fn from_torrent_to_dic(torrent_file: Vec<u8>) -> Result<DicValues, ErrorBenc
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_bencoding_decoder {
     use super::*;
     mod tests_to_strings {
         use super::*;

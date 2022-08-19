@@ -30,7 +30,7 @@ pub fn from_url(url: Vec<u8>) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_urlencoding_decoder {
     use super::*;
 
     #[test]

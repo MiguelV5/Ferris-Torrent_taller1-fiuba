@@ -4,6 +4,5 @@
 pub mod client;
 pub mod data;
 pub mod logger;
-pub mod port_testing;
 pub mod torrent_handler;
 pub mod user_interface;

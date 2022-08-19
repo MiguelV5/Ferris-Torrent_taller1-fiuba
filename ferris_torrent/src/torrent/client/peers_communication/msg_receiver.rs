@@ -83,7 +83,7 @@ pub fn receive_message(stream: &mut TcpStream) -> Result<P2PMessage, MsgReceiver
 #[cfg(test)]
 mod test_msg_receiver {
     use super::*;
-    use crate::torrent::port_testing::listener_binder::*;
+    use shared::port_binder::listener_binder::*;
 
     use shared::parsers::p2p::constants::PSTR_STRING_HANDSHAKE;
 
@@ -99,7 +99,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_handshake_ok() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -118,7 +119,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_hanshake_with_less_bytes_error() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -139,7 +141,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_hanshake_with_invalid_fields_error() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -166,7 +169,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_keep_alive_ok() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -182,7 +186,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_with_id_ok() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -198,7 +203,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_with_id_and_payload_ok() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -214,7 +220,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_with_more_than_one_msg_ok() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -238,7 +245,8 @@ mod test_msg_receiver {
 
         #[test]
         fn receive_message_with_less_bytes_error() -> Result<(), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
             let mut sender_stream = TcpStream::connect(address)?;
             let (mut receptor_stream, _addr) = listener.accept()?;
 

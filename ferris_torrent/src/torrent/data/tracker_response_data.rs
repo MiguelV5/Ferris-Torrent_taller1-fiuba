@@ -222,7 +222,7 @@ impl TrackerResponseData {
 }
 
 #[cfg(test)]
-mod test {
+mod tests_tracker_response_data {
     use super::*;
     #[test]
     fn test_get_dic_u64_ok() {

@@ -242,13 +242,15 @@ mod test_msg_sender {
             torrent_status::{StateOfDownload, TorrentStatus},
             tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
         },
-        port_testing::listener_binder::*,
     };
 
-    use shared::parsers::p2p::{
-        self,
-        constants::{PSTR_STRING_HANDSHAKE, TOTAL_NUM_OF_BYTES_HANDSHAKE},
-        message::{P2PMessage, PieceStatus},
+    use shared::{
+        parsers::p2p::{
+            self,
+            constants::{PSTR_STRING_HANDSHAKE, TOTAL_NUM_OF_BYTES_HANDSHAKE},
+            message::{P2PMessage, PieceStatus},
+        },
+        port_binder::listener_binder::*,
     };
 
     use std::{
@@ -272,7 +274,7 @@ mod test_msg_sender {
         ),
         Box<dyn Error>,
     > {
-        let (_listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (_listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let stream = TcpStream::connect(address)?;
 
         let server_peer = PeerDataFromTrackerResponse {
@@ -333,7 +335,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_a_handshake_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -361,7 +363,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_keep_alive_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -380,7 +382,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_choke_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -399,7 +401,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_unchoke_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -418,7 +420,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_interested_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -437,7 +439,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_not_interested_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -456,7 +458,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_have_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -472,7 +474,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_with_no_pieces_send_bitfield_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -518,7 +520,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_with_some_pieces_send_bitfield_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -563,7 +565,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_request_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
         let torrent_file_data = TorrentFileData {
@@ -606,7 +608,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_piece_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
 
@@ -627,7 +629,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_piece_of_zero_bytes_error() -> Result<(), Box<dyn Error>> {
-        let (_listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (_listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
 
         assert_eq!(
@@ -643,7 +645,7 @@ mod test_msg_sender {
     #[test]
     fn client_peer_send_piece_bigger_than_the_max_block_bytes_error() -> Result<(), Box<dyn Error>>
     {
-        let (_listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (_listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
 
         assert_eq!(
@@ -658,7 +660,7 @@ mod test_msg_sender {
 
     #[test]
     fn client_peer_send_cancel_ok() -> Result<(), Box<dyn Error>> {
-        let (listener, address) = try_bind_listener(STARTING_PORT)?;
+        let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
         let mut sender_stream = TcpStream::connect(address)?;
         let (mut receptor_stream, _addr) = listener.accept()?;
         let torrent_file_data = TorrentFileData {

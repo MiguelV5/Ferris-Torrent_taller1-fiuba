@@ -13,13 +13,15 @@ use ferris_torrent::torrent::{
         torrent_status::{StateOfDownload, TorrentStatus},
         tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
     },
-    port_testing::listener_binder::*,
 };
 
-use shared::parsers::{
-    p2p,
-    p2p::constants::PSTR_STRING_HANDSHAKE,
-    p2p::message::{P2PMessage, PieceStatus},
+use shared::{
+    parsers::{
+        p2p,
+        p2p::constants::PSTR_STRING_HANDSHAKE,
+        p2p::message::{P2PMessage, PieceStatus},
+    },
+    port_binder::listener_binder::*,
 };
 
 use gtk::glib;
@@ -468,7 +470,7 @@ fn server_peer_interaction_mock_for_receiving_an_entire_file(
 #[test]
 fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
     // CREO EL LISTENER PARA EL SERVER
-    let (listener, address) = try_bind_listener(STARTING_PORT)?;
+    let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
     // CREO INFO NECESARIA PARA INICIAR COMUNICACION
     let (tracker_response, _torrent_status, torrent_file_data, _global_shutdown, _local_shutdown) =
@@ -534,7 +536,7 @@ fn client_peer_receives_a_handshake_ok() -> Result<(), Box<dyn Error>> {
 #[test]
 fn client_peer_interact_with_a_peer_and_receives_one_block_ok() -> Result<(), Box<dyn Error>> {
     //ABRO LA CONEXION
-    let (listener, address) = try_bind_listener(STARTING_PORT)?;
+    let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
     // CREO INFO NECESARIA PARA INICIAR COMUNICACION
     let (tracker_response, torrent_status, torrent_file_data, global_shutdown, local_shutdown) =
@@ -644,7 +646,7 @@ fn client_peer_interact_with_a_peer_and_receives_one_block_ok() -> Result<(), Bo
 fn client_peer_interact_with_a_peer_and_completes_the_whole_file_ok() -> Result<(), Box<dyn Error>>
 {
     //ABRO LA CONEXION
-    let (listener, address) = try_bind_listener(STARTING_PORT)?;
+    let (listener, address) = try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
     // CREO INFO NECESARIA PARA INICIAR COMUNICACION
     let (tracker_response, torrent_status, torrent_file_data, _global_shutdown, _local_shutdown) =

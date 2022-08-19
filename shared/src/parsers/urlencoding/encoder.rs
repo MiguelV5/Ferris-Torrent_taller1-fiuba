@@ -5,7 +5,6 @@
 /// Recibe los bytes correspondientes a un String y lo devuelve codificado en percent-encoding según sus caracteres ascii
 ///
 // Ejemplo
-//(Ejemplos comentados para reduccion de tiempo de compilacion excesivo, pero pasan Doc test correctamente)
 // ```
 // # use shared::parsers::url_encoder;
 // let to_encode = " A<>d#%{}|^~[]RR`mpqZ".as_bytes().to_vec();
@@ -25,7 +24,7 @@ pub fn from_string_bytes(to_encode: Vec<u8>) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_urlencoding_encoder {
     use super::*;
     #[test]
     fn space_encodes_to_percent20_ok() {

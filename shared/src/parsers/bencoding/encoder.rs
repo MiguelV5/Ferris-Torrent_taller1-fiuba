@@ -73,7 +73,7 @@ pub fn from_dic(to_bencode: HashMap<Vec<u8>, ValuesBencoding>) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_bencoding_encoder {
     use super::*;
     mod tests_from_string {
         use super::*;

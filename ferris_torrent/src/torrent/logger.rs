@@ -57,8 +57,8 @@ impl Logger {
     // use ferris_torrent::torrent::logger::*;
     //
     // //Inicializa el sender y el receiver, y ademàs se obtiene el handle para hacer join
-    // let logger = Logger::new("temp/logs".to_string(), "mitorrent.torrent".to_string()).unwrap();
-    // let (sender1, handle) = logger.init_logger().unwrap();
+    // let logger = Logger::new("temp/logs".to_string(), "mitorrent.torrent".to_string())?;
+    // let (sender1, handle) = logger.init_logger()?;
     // //Obtener un segundo sender
     // let sender2 = sender1.clone();
     // sender1.send("Descargué la pieza 1".to_string());

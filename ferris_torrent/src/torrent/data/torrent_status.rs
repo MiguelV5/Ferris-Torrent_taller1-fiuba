@@ -344,14 +344,11 @@ mod test_torrent_status {
         use crate::torrent::client::peers_communication::local_peer_communicator::{
             LocalPeerCommunicator, PeerRole,
         };
-        use crate::torrent::{
-            data::{
-                peer_data_for_communication::PeerDataForP2PCommunication,
-                torrent_status::{StateOfDownload, TorrentStatus},
-            },
-            port_testing::listener_binder::*,
+        use crate::torrent::data::{
+            peer_data_for_communication::PeerDataForP2PCommunication,
+            torrent_status::{StateOfDownload, TorrentStatus},
         };
-        use shared::parsers::p2p::message::PieceStatus;
+        use shared::{parsers::p2p::message::PieceStatus, port_binder::listener_binder::*};
 
         pub const DEFAULT_CLIENT_PEER_ID: &str = "-FA0001-000000000000";
         pub const DEFAULT_SERVER_PEER_ID: &str = "-FA0001-000000000001";
@@ -360,7 +357,8 @@ mod test_torrent_status {
 
         fn create_default_torrent_status_with_a_server_peer_that_has_the_whole_file(
         ) -> Result<(TorrentStatus, LocalPeerCommunicator), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
             let handler = thread::spawn(move || listener.accept());
 
@@ -407,7 +405,8 @@ mod test_torrent_status {
 
         fn create_default_torrent_status_with_a_server_peer_that_has_just_one_valid_piece(
         ) -> Result<(TorrentStatus, LocalPeerCommunicator), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
             let handler = thread::spawn(move || listener.accept());
 
@@ -456,7 +455,8 @@ mod test_torrent_status {
 
         fn create_default_torrent_status_with_a_server_peer_that_has_no_valid_pieces(
         ) -> Result<(TorrentStatus, LocalPeerCommunicator), Box<dyn Error>> {
-            let (listener, address) = try_bind_listener(STARTING_PORT)?;
+            let (listener, address) =
+                try_bind_listener(STARTING_PORT_FOR_TESTS, MAX_PORT_FOR_TESTS)?;
 
             let handler = thread::spawn(move || listener.accept());
 

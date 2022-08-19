@@ -492,7 +492,7 @@ pub fn communicate_with_tracker(
 }
 
 #[cfg(test)]
-mod test {
+mod tests_http_handler {
     use super::*;
     use crate::torrent::{
         client::medatada_analyzer::read_torrent_file_to_dic, data::config_file_data::ConfigFileData,

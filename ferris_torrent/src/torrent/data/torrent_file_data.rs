@@ -475,7 +475,7 @@ impl TorrentFileData {
 }
 
 #[cfg(test)]
-mod test {
+mod tests_torrent_file_data {
     use super::*;
     use crate::torrent::client::medatada_analyzer::read_torrent_file_to_dic;
 

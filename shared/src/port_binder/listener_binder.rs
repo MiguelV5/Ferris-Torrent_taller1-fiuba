@@ -1,16 +1,19 @@
-//!
-//!
+//! Modulo para bind de puertos para listeners, de tal forma que se evita error de bind por puerto ya usado por algun otro proceso.
 //!
 
 use std::{error::Error, fmt, io::ErrorKind, net::TcpListener};
 
 pub const LOCALHOST: &str = "127.0.0.1";
-pub const STARTING_PORT: u16 = 8080;
-pub const MAX_PORT_TO_TRY_BIND: u16 = 9080;
+pub const MAX_PORT_RANGE_SIZE: u16 = 1000;
+
+pub const STARTING_PORT_FOR_TESTS: u16 = 8080; // Puertos genericos para uso en todos los tests con el try_bind
+pub const MAX_PORT_FOR_TESTS: u16 = 9079;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum PortBindingError {
     ReachedMaxPortWithoutFindingAnAvailableOne,
+    GivenPortRangeIsWayTooLarge,
+    GivenFirstPortIsGreaterThanTheMaxPort,
 }
 
 impl fmt::Display for PortBindingError {
@@ -21,9 +24,9 @@ impl fmt::Display for PortBindingError {
 
 impl Error for PortBindingError {}
 
-fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
+fn update_port(current_port: u16, max_port: u16) -> Result<u16, PortBindingError> {
     let mut new_port: u16 = current_port;
-    if current_port >= MAX_PORT_TO_TRY_BIND {
+    if current_port >= max_port {
         Err(PortBindingError::ReachedMaxPortWithoutFindingAnAvailableOne)
     } else {
         new_port += 1;
@@ -31,8 +34,19 @@ fn update_port(current_port: u16) -> Result<u16, PortBindingError> {
     }
 }
 
-/// Busca bindear un listener mientras que el error sea por causa de una direccion que ya está en uso.
-pub fn try_bind_listener(first_port: u16) -> Result<(TcpListener, String), Box<dyn Error>> {
+/// Busca bindear un listener a un puerto de localhost mientras que el error sea por causa de una direccion que ya está en uso.
+pub fn try_bind_listener(
+    first_port: u16,
+    max_port: u16,
+) -> Result<(TcpListener, String), Box<dyn Error>> {
+    if first_port >= max_port {
+        return Err(Box::new(
+            PortBindingError::GivenFirstPortIsGreaterThanTheMaxPort,
+        ));
+    } else if max_port - first_port >= MAX_PORT_RANGE_SIZE {
+        return Err(Box::new(PortBindingError::GivenPortRangeIsWayTooLarge));
+    }
+
     let mut listener = TcpListener::bind(format!("{}:{}", LOCALHOST, first_port));
 
     let mut current_port = first_port;
@@ -41,7 +55,7 @@ pub fn try_bind_listener(first_port: u16) -> Result<(TcpListener, String), Box<d
         if bind_err.kind() != ErrorKind::AddrInUse {
             return Err(Box::new(bind_err));
         } else {
-            current_port = update_port(current_port)?;
+            current_port = update_port(current_port, max_port)?;
             listener = TcpListener::bind(format!("{}:{}", LOCALHOST, current_port));
         }
     }
