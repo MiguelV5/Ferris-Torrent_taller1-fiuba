@@ -56,3 +56,4 @@ pub const ERROR_PORT_INVALID: &str = "you sent me garbage - invalid port";
 
 pub const TIMES: &str = "times";
 pub const CONNECTIONS: &str = "connections";
+pub const TORRENTS: &str = "torrents";
