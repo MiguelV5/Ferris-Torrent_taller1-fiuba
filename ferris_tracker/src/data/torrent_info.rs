@@ -1,8 +1,5 @@
-use super::{
-    super::bencoding::{self, values::ValuesBencoding},
-    constants::*,
-    peer_info::PeerInfo,
-};
+use super::{constants::*, peer_info::PeerInfo};
+use shared::parsers::bencoding::{self, values::ValuesBencoding};
 use std::collections::HashMap;
 
 pub struct TorrentInfo {

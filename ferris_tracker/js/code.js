@@ -1,127 +1,166 @@
-var xValuesHour = ['2022-01-01 00:00:00', '2022-01-01 00:10:00', '2022-01-01 00:15:00', '2022-01-01 00:20:00',
-'2022-01-01 00:30:00', '2022-01-01 00:45:00', '2022-01-01 00:55:00', '2022-01-01 01:00:00'];
-var yValuesHour = [0, 1, 3, 5, 10, 11, 12, 12];
+var timesInJson = [];
+var connectionsInJson = [];
+var completedInJson = [];
 
-var xValuesFiveHours = ['2022-01-01 00:00:00', '2022-01-01 01:00:00', '2022-01-01 01:30:00', '2022-01-01 02:00:00',
-'2022-01-01 03:00:00', '2022-01-01 03:30:00', '2022-01-01 04:00:00', '2022-01-01 05:00:00'];
-var yValuesFiveHours = [0, 10, 15, 22, 28, 33, 40, 43];
+var arrayTimes = [];
+var arrayConnections = [];
+var arrayCompleted = [];
 
-var xValuesDay = ['2022-01-01 00:00:00', '2022-01-01 05:00:00', '2022-01-01 11:30:00', '2022-01-01 12:00:00',
-'2022-01-01 17:00:00', '2022-01-01 20:30:00', '2022-01-01 22:00:00', '2022-01-01 23:30:00'];
-var yValuesDay = [0, 20, 35, 44, 55, 60, 70, 88];
+var howFarInTime = 1;
+var leapsInTime = "Hours"
 
-var xValuesThreeDays = ['2022-01-01 00:00:00', '2022-01-01 15:00:00', '2022-01-01 21:30:00', '2022-01-02 12:00:00',
-'2022-01-02 17:00:00', '2022-01-02 20:30:00', '2022-01-03 13:00:00', '2022-01-03 23:30:00'];
-var yValuesThreeDays = [0, 25, 39, 43, 55, 74, 88, 100];
+var lineChart;
 
-const lineChart = new Chart("lineChart", {
-  type: "line",
-  data: {
-    labels: xValuesHour,
-    datasets: [{
-      label: 'Conexiones',
-      fill: false,
-      backgroundColor: "rgba(0,0,255,1.0)",
-      borderColor: "rgba(0,0,255,0.1)",
-      data: yValuesHour
-    }]
-  },
-  options: {
-    responsive: true,
-    legend: {display: true},
-    scales: {
-      xAxes: [{
-        type: 'time',
-        distribution: 'linear',
-        time: {
-          displayFormats: {
-            'hour': 'ddd HH:mm a',
-            'day': 'MMM DD',
-            'week': 'MMM DD',
-            'month': 'DD MMM YYYY',
-            'quarter': 'MMM YYYY',
-            'year': 'MMM YYYY',
-         }
-        }
-      }]
-    }
-  }
-});
-
-const barChart = new Chart("barChart", {
-  type: "bar",
-  data: {
-    labels: xValuesHour,
-    datasets: [{
-      label: 'Conexiones',
-      fill: false,
-      backgroundColor: "rgba(0,0,255,1.0)",
-      borderColor: "rgba(0,0,255,0.1)",
-      data: yValuesHour
-    }]
-  },
-  options: {
-    responsive: true,
-    legend: {display: true},
-    scales: {
-      xAxes: [{
-        type: 'time',
-        distribution: 'linear',
-        time: {
-          displayFormats: {
-            'hour': 'ddd HH:mm a',
-            'day': 'HH:mm',
-            'week': 'MMM DD',
-            'month': 'MMM YYYY',
-            'quarter': 'MMM YYYY',
-            'year': 'MMM YYYY',
-         }
-        }
-      }]
-    }
-  }
-})
-
-function alertSelectedValueLine() {
-  var select = document.getElementById('longTimeLine');
-  var text = select.options[select.selectedIndex].text;
-  if (text == 'Last hour') {
-    lineChart.data.labels = xValuesHour
-    lineChart.data.datasets[0].data = yValuesHour
-    lineChart.update();
-  } else if (text == 'Last five hours') {
-    lineChart.data.labels = xValuesFiveHours
-    lineChart.data.datasets[0].data = yValuesFiveHours
-    lineChart.update();
-  } else if (text == 'Last day') {
-    lineChart.data.labels = xValuesDay
-    lineChart.data.datasets[0].data = yValuesDay
-    lineChart.update();
+function isInTime(time,betweenTime) {
+  let firstTime = new Date(betweenTime.getTime());
+  let lastTime = new Date(betweenTime.getTime());
+  if (leapsInTime == "Hours"){
+    lastTime.setHours(betweenTime.getHours() + 1);
   } else {
-    lineChart.data.labels = xValuesThreeDays
-    lineChart.data.datasets[0].data = yValuesThreeDays
-    lineChart.update();
+    lastTime.setMinutes(betweenTime.getMinutes() + 1);
+  }
+
+  if (time >= firstTime && time < lastTime) {
+      return true
+  } else {
+      return false
   }
 }
 
-function alertSelectedValueBar() {
-  var select = document.getElementById('longTimeBar');
-  var text = select.options[select.selectedIndex].text;
-  if (text == 'Last hour') {
-    barChart.data.labels = xValuesHour
-    barChart.data.datasets[0].data = yValuesHour
-    barChart.update();
-  } else if (text == 'Last five hours') {
-    barChart.data.labels = xValuesFiveHours
-    barChart.data.datasets[0].data = yValuesFiveHours
-    barChart.update();
-  } else if (text == 'Last day') {
-    barChart.data.labels = xValuesDay
-    barChart.data.datasets[0].data = yValuesDay
-    barChart.update();
-  } else {
-    barChart.data.labels = xValuesThreeDays
-    barChart.data.datasets[0].data = yValuesThreeDays
-    barChart.update();
+function searchConnections() {
+  arrayTimes = [];
+  arrayConnections = [];
+  arrayCompleted = [];
+
+  let cantConnectedNow = 0;
+  let cantCompletedNow = 0;
+  let pos = 0;
+  let now = new Date();
+  let startingTime = new Date();
+  startingTime.setHours(now.getHours() - howFarInTime);
+
+  while (new Date(timesInJson[pos]) < startingTime){
+    pos += 1;
+    if (pos < timesInJson.length) {
+      cantConnectedNow = connectionsInJson[pos];
+      cantCompletedNow = completedInJson[pos];
+    }
   }
+  
+  while (startingTime < now) {
+    let keepSearching = pos < timesInJson.length;
+    while (keepSearching) {
+      let timeInJson = timesInJson[pos];
+      if (isInTime(new Date(timeInJson), startingTime)){
+        cantConnectedNow = connectionsInJson[pos];
+        cantCompletedNow = completedInJson[pos];
+        pos = pos + 1;
+        keepSearching = pos < timesInJson.length;
+      } else {
+        keepSearching = false;
+      }
+    }
+
+    arrayTimes.push(new Date(startingTime.getTime()));
+    arrayConnections.push(cantConnectedNow);
+    arrayCompleted.push(cantCompletedNow);
+
+    if (leapsInTime == "Hours"){
+      startingTime.setHours(startingTime.getHours() + 1);
+    } else {
+      startingTime.setMinutes(startingTime.getMinutes() + 1);
+    }
+  }
+}
+
+fetch('database.json')
+  .then(response => response.json())
+  .then(result => {
+    timesInJson = result.times;
+    connectionsInJson = result.connections;
+    completedInJson = result.completed;
+
+    searchConnections();
+
+    lineChart = new Chart("lineGraph", {
+      type: "line",
+      data: {
+        labels: arrayTimes,
+        datasets: [{
+          label: 'Conexiones activas',
+          lineTension: 0,
+          borderColor: 'rgba(0,0,255,1)',
+          backgroundColor: 'rgba(0,0,255,0.3)',
+          fill: true,
+          data: arrayConnections
+        },
+        {
+          label: 'Conexiones completas',
+          lineTension: 0,
+          borderColor: 'rgba(255,0,0,1)',
+          backgroundColor: 'rgba(255,0,0,0.3)',
+          fill: true,
+          data: arrayCompleted
+        }
+      ]
+      },
+      options: {
+        responsive: true,
+        legend: {display: true},
+        scales: {
+          xAxes: [{
+            type: 'time',
+            distribution: 'linear',
+            time: {
+              displayFormats: {
+                'hour': 'ddd HH:mm a',
+                'day': 'MMM DD',
+                'week': 'MMM DD',
+                'month': 'DD MMM YYYY',
+                'quarter': 'MMM YYYY',
+                'year': 'MMM YYYY',
+             }
+            }
+          }],
+          yAxes: [{
+            ticks: {
+              beginAtZero: true
+            }
+        }]
+        }
+      }
+    });
+});
+
+function alertLeapsTime() {
+  let select = document.getElementById('leapsTime');
+  let text = select.options[select.selectedIndex].text;
+  if (text == 'In hours'){
+    leapsInTime = "Hours";
+  } else {
+    leapsInTime = "Minutes";
+  }
+  searchConnections();
+  lineChart.data.labels = arrayTimes
+  lineChart.data.datasets[0].data = arrayConnections
+  lineChart.data.datasets[1].data = arrayCompleted
+  lineChart.update();
+}
+function alertLongTime() {
+  let select = document.getElementById('howLongTime');
+  let text = select.options[select.selectedIndex].text;
+  if (text == 'Last hour') {
+    howFarInTime = 1;
+  } else if (text == 'Last five hours') {
+    howFarInTime = 5;
+  } else if (text == 'Last day') {
+    howFarInTime = 24;
+  } else {
+    howFarInTime = 72;
+  }
+  searchConnections();
+  lineChart.data.labels = arrayTimes
+  lineChart.data.datasets[0].data = arrayConnections
+  lineChart.data.datasets[1].data = arrayCompleted
+  lineChart.update();
 }

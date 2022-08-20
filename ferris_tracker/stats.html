@@ -8,9 +8,7 @@
     <link rel="icon" href="https://raw.githubusercontent.com/MiguelV5/MiguelV5/main/misc/Soul_of_Fright.gif">
 </head>
 
-
 <body>
-
     <div class="banner">
         <div class="navbar">
             <img src="https://raw.githubusercontent.com/MiguelV5/MiguelV5/main/misc/ferris_pixel_no_bg.gif"
@@ -28,43 +26,27 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.js"></script>
-    <!--https://cdn.jsdelivr.net/npm/chart.js-->
 
     <div class="content">
 
         <h2>Stats from Tracker</h2>
 
         <div>
-            <canvas id="lineChart"></canvas>
+            <canvas id="lineGraph"></canvas>
             <br>
-            <select id="longTimeLine" , onchange="alertSelectedValueLine();">
+            <select id="howLongTime" , onchange="alertLongTime();">
                 <option value="lastHour"> Last hour </option>
                 <option value="fiveHours"> Last five hours </option>
                 <option value="lastDay"> Last day </option>
                 <option value="threeDays"> Last 3 days </option>
             </select>
-
-
-            <canvas id="barChart"></canvas>
-            <br>
-            <select id="longTimeBar" , onchange="alertSelectedValueBar();">
-                <option value="lastHour"> Last hour </option>
-                <option value="fiveHours"> Last five hours </option>
-                <option value="lastDay"> Last day </option>
-                <option value="threeDays"> Last 3 days </option>
+            <select id="leapsTime" , onchange="alertLeapsTime();">
+                <option value="lastHour"> In hours </option>
+                <option value="fiveHours"> In minutes </option>
             </select>
         </div>
 
     </div>
-
-
-
-    <!--
-                Para uso local y no web reemplazar usar src="js/code.js"
-                Para uso web utilizar src="http://127.0.0.1:7878/code.js"
-            -->
-    <script src="http://localhost:7878/code.js"></script>
-
+    <script type="text/javascript" src="js/code.js"></script>
 </body>
-
 </html>

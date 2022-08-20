@@ -2,10 +2,11 @@ use std::ops::RangeInclusive;
 
 pub const GET_URL: &[u8; 16] = b"GET / HTTP/1.1\r\n";
 pub const ANNOUNCE_URL: &[u8; 13] = b"GET /announce";
-pub const CODE_URL: &[u8; 9] = b"GET /code";
+pub const CODE_URL: &[u8; 12] = b"GET /js/code";
 pub const STATS_URL: &[u8; 15] = b"GET /stats.html";
 pub const DOCS_URL: &[u8; 14] = b"GET /docs.html";
 pub const STYLE_URL: &[u8; 10] = b"GET /style";
+pub const JSON_URL: &[u8; 18] = b"GET /database.json";
 pub const OK_URL: &str = "HTTP/1.1 200 OK";
 pub const ERR_URL: &str = "HTTP/1.1 404 NOT FOUND";
 
@@ -14,6 +15,7 @@ pub const CODE_JS: &str = "js/code.js";
 pub const STATS_HTML: &str = "stats.html";
 pub const DOCS_HTML: &str = "docs.html";
 pub const STYLE_CSS: &str = "style.css";
+pub const JSON: &str = "database.json";
 pub const ERROR_HTML: &str = "404.html";
 
 pub const INFO_HASH: &str = "info_hash=";
@@ -51,3 +53,6 @@ pub const ERROR_STAT_NOT_FOUND: &str =
     "you sent me garbage - invalid literal for long() with base 10: ''";
 pub const ERROR_STAT_INVALID: &str = "you sent me garbage - invalid amount";
 pub const ERROR_PORT_INVALID: &str = "you sent me garbage - invalid port";
+
+pub const TIMES: &str = "times";
+pub const CONNECTIONS: &str = "connections";

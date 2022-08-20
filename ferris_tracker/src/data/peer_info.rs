@@ -1,4 +1,5 @@
-use super::{super::urlencoding, constants::*};
+use super::constants::*;
+use shared::parsers::urlencoding;
 use std::{error::Error, fmt, net::SocketAddr};
 
 #[derive(PartialEq, Eq, Debug)]
@@ -263,7 +264,7 @@ mod tests_peer_info {
     use std::{net::SocketAddr, str::FromStr};
 
     use crate::{
-        tracker::data::peer_info::{get_event, PeerInfo},
+        data::peer_info::{get_event, PeerInfo},
         ResultDyn,
     };
 

@@ -91,44 +91,31 @@ body {
     font-size: 20px;
 }
 
-#lineChart {
-
+#lineGraph {
     margin: 20px;
-    max-width: 600px;
-    max-height: 400px;
+    max-width: 700px;
+    max-height: 500px;
     position: absolute;
     top: -80px;
     left: 40px;
-    /* background: #a4b8db; */
-
+    background: #ffffff;
+    border-style: outset;
+    border-width: 3px;
+    border-color: rgb(119, 113, 113);
 }
 
-#longTimeLine {
+#howLongTime {
     margin: 20px;
     position: relative;
-    top: -20px;
-    left: 120px;
+    top: 20px;
+    left: 150px;
 }
 
-/**/
-
-#barChart {
-
-    margin: 20px;
-    max-width: 600px;
-    max-height: 400px;
-    position: absolute;
-    top: 300px;
-    left: 40px;
-    /* background: #a4b8db; */
-
-}
-
-#longTimeBar {
+#leapsTime {
     margin: 20px;
     position: relative;
-    top: 330px;
-    left: 120px;
+    top: 50px;
+    left: -23px;
 }
 
 button {
