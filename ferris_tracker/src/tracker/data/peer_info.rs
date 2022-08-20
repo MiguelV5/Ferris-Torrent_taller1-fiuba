@@ -264,7 +264,7 @@ mod tests_peer_info {
     use std::{net::SocketAddr, str::FromStr};
 
     use crate::{
-        data::peer_info::{get_event, PeerInfo},
+        tracker::data::peer_info::{get_event, PeerInfo},
         ResultDyn,
     };
 

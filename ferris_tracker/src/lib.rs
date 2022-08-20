@@ -25,9 +25,7 @@
 //!
 //!
 
-pub mod communication;
-pub mod data;
-pub mod thread_pool;
+pub mod tracker;
 
 use std::{
     collections::HashMap,
@@ -40,7 +38,7 @@ use std::{
 
 use log::info;
 
-use data::torrent_info::TorrentInfo;
+use crate::tracker::{communication, data::torrent_info::TorrentInfo};
 
 type ArcMutexOfTorrents = Arc<RwLock<HashMap<Vec<u8>, TorrentInfo>>>;
 type ResultDyn<T> = Result<T, Box<dyn Error>>;

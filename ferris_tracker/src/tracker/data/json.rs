@@ -6,7 +6,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::data::constants::{COMPLETED, CONNECTIONS, TIMES};
+use crate::tracker::data::constants::{COMPLETED, CONNECTIONS, TIMES};
 
 #[derive(Serialize, Deserialize)]
 struct Json {

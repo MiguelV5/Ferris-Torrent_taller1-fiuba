@@ -10,12 +10,14 @@ use std::{
 use log::{error, info};
 
 use crate::{
-    data::{
-        constants::*,
-        peer_info::{get_error_response_for_announce, PeerInfo, PeerInfoError},
-    },
     is_global_shutdown_set,
-    thread_pool::ThreadPool,
+    tracker::{
+        data::{
+            constants::*,
+            peer_info::{get_error_response_for_announce, PeerInfo, PeerInfoError},
+        },
+        thread_pool::ThreadPool,
+    },
     ArcMutexOfTorrents, ResultDyn, TrackerError,
 };
 
