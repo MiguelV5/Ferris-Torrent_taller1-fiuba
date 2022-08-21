@@ -1,2 +1,2 @@
-torrents_path ferris_tracker/torrents_for_test
+torrents_path torrents_files
 number_threads 4

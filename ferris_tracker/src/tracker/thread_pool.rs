@@ -1,5 +1,7 @@
 use log::info;
 use std::{
+    error::Error,
+    fmt,
     sync::{
         mpsc::{self, Receiver},
         Arc, Mutex,
@@ -16,6 +18,23 @@ struct Worker {
     id: usize,
     thread: Option<thread::JoinHandle<()>>,
 }
+
+// ========================================================================================
+
+#[derive(Debug)]
+pub enum ThreadPoolError {
+    SendingJobToWorkerError(String),
+}
+
+impl fmt::Display for ThreadPoolError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\n    {:#?}\n", self)
+    }
+}
+
+impl Error for ThreadPoolError {}
+
+// ========================================================================================
 
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<Receiver<Message>>>) -> Worker {
@@ -63,12 +82,15 @@ impl ThreadPool {
         ThreadPool { workers, sender }
     }
 
-    pub fn execute<F>(&self, f: F)
+    pub fn execute<F>(&self, f: F) -> Result<(), ThreadPoolError>
     where
         F: FnOnce() + Send + 'static,
     {
         let job = Box::new(f);
-        let _ = self.sender.send(Message::NewJob(job));
+        self.sender
+            .send(Message::NewJob(job))
+            .map_err(|err| ThreadPoolError::SendingJobToWorkerError(err.to_string()))?;
+        Ok(())
     }
 }
 

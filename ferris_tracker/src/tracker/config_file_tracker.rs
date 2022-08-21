@@ -164,7 +164,7 @@ mod tests_config_file {
             Err(error) => return Err(error),
         };
         assert_eq!(config.number_of_threads, 4);
-        assert_eq!(config.torrents_path, "ferris_tracker/torrents_for_test");
+        assert_eq!(config.torrents_path, "torrents_files");
         Ok(())
     }
 }

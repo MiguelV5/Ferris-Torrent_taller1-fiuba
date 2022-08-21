@@ -41,7 +41,14 @@ use std::{
 use log::{debug, error, info};
 use shared::medatada_analyzer;
 
-use crate::tracker::{communication, config_file_tracker, data::torrent_info::TorrentInfo};
+use crate::tracker::{
+    communication::{
+        self,
+        handler::{set_global_shutdown, CommunicationError},
+    },
+    config_file_tracker,
+    data::torrent_info::TorrentInfo,
+};
 
 type ArcMutexOfTorrents = Arc<RwLock<HashMap<Vec<u8>, TorrentInfo>>>;
 type ResultDyn<T> = Result<T, Box<dyn Error>>;
@@ -49,6 +56,8 @@ type ResultDyn<T> = Result<T, Box<dyn Error>>;
 #[derive(PartialEq, Eq, Debug)]
 pub enum TrackerError {
     UnlockingMutexOfTorrents,
+    JoiningQuitInput,
+    CommsError(CommunicationError),
     NotFoundTorrents,
     NotFoundTorrentsDirectory,
     Folder(String),
@@ -138,20 +147,6 @@ fn init_handler_for_quit_input(global_shutdown: Arc<RwLock<bool>>) -> JoinHandle
     })
 }
 
-fn is_global_shutdown_set(global_shutdown: &Arc<RwLock<bool>>) -> bool {
-    if let Ok(mutex_sutdown) = global_shutdown.read() {
-        *mutex_sutdown
-    } else {
-        true // Si el global shutdown está poisoned, hay que cortar todo igual
-    }
-}
-
-fn set_global_shutdown(global_shutdown: &Arc<RwLock<bool>>) -> ResultDyn<()> {
-    let mut global_shutdown = global_shutdown.write().map_err(|err| format!("{}", err))?;
-    *global_shutdown = true;
-    Ok(())
-}
-
 ///
 /// FUNCION PRINCIPAL PARA LA EJECUCION DEL PROGRAMA
 ///
@@ -161,16 +156,13 @@ fn set_global_shutdown(global_shutdown: &Arc<RwLock<bool>>) -> ResultDyn<()> {
 /// Devuelve un Error si hubo algún problema durante todo el proceso.
 ///
 pub fn run() -> ResultDyn<()> {
-    // Hay que ver a lo ultimo si se pueden hacer refactors sobre los errores asi no devolvemos Box dyn
-
     pretty_env_logger::init();
     info!("tracker init");
 
     let global_shutdown = Arc::new(RwLock::new(false));
 
-    info!("Archivo de configuración leido y parseado correctamente");
-
     let config_data = config_file_tracker::ConfigFileData::new("config.txt")?;
+    info!("Archivo de configuración leido y parseado correctamente");
 
     let mutex_of_torrents: ArcMutexOfTorrents = init_torrents(config_data.get_torrents_path())?;
 
@@ -185,9 +177,12 @@ pub fn run() -> ResultDyn<()> {
         mutex_of_torrents,
         global_shutdown,
         config_data.get_number_of_threads(),
-    );
+    )
+    .map_err(TrackerError::CommsError)?;
 
-    let _ = join_hander.join();
+    join_hander
+        .join()
+        .map_err(|_err| TrackerError::JoiningQuitInput)?;
 
     Ok(())
 }

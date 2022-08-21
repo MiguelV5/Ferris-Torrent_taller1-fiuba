@@ -53,6 +53,7 @@ pub const ERROR_STAT_NOT_FOUND: &str =
     "you sent me garbage - invalid literal for long() with base 10: ''";
 pub const ERROR_STAT_INVALID: &str = "you sent me garbage - invalid amount";
 pub const ERROR_PORT_INVALID: &str = "you sent me garbage - invalid port";
+pub const ERROR_500: &str = "500 ERROR - Poissoned Lock";
 
 pub const TIMES: &str = "times";
 pub const CONNECTIONS: &str = "connections";

@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    error::Error,
+    fmt, fs,
     io::{ErrorKind, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{Arc, RwLock},
@@ -10,7 +11,6 @@ use std::{
 use log::{error, info};
 
 use crate::{
-    is_global_shutdown_set,
     tracker::{
         data::{
             constants::*,
@@ -18,14 +18,49 @@ use crate::{
         },
         thread_pool::ThreadPool,
     },
-    ArcMutexOfTorrents, ResultDyn, TrackerError,
+    ArcMutexOfTorrents,
 };
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum CommunicationError {
+    PoolExecutionError(String),
+    ShutdownSettingError(String),
+    ReadingFilesToFillResponseContentError(String),
+    WritingResponse(String),
+    UnlockingMutexOfTorrents,
+}
+
+impl fmt::Display for CommunicationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\n    {:#?}\n", self)
+    }
+}
+
+impl Error for CommunicationError {}
+
+// ========================================================================================
+
+pub fn is_global_shutdown_set(global_shutdown: &Arc<RwLock<bool>>) -> bool {
+    if let Ok(mutex_sutdown) = global_shutdown.read() {
+        *mutex_sutdown
+    } else {
+        true // Si el global shutdown está poisoned, hay que cortar todo igual
+    }
+}
+
+pub fn set_global_shutdown(global_shutdown: &Arc<RwLock<bool>>) -> Result<(), CommunicationError> {
+    let mut global_shutdown = global_shutdown
+        .write()
+        .map_err(|err| CommunicationError::ShutdownSettingError(err.to_string()))?;
+    *global_shutdown = true;
+    Ok(())
+}
 
 fn get_response_details(
     buffer: &[u8],
     dic_torrents: &ArcMutexOfTorrents,
     ip_port: SocketAddr,
-) -> ResultDyn<Vec<u8>> {
+) -> Vec<u8> {
     let info_of_announced_peer = PeerInfo::new((*buffer).to_vec(), ip_port);
 
     let details = match info_of_announced_peer {
@@ -46,42 +81,75 @@ fn get_response_details(
                         .as_bytes()
                         .to_vec(),
                 },
-                Err(_) => return Err(Box::new(TrackerError::UnlockingMutexOfTorrents)), // Como este es error de nuestro server podriamos considerar cambiarlo a un error de codigo 500 por ej, sino el peer no se entera de nada y le cortamos de repente
+                Err(_) => get_error_response_for_announce(PeerInfoError::PoissonedLock)
+                    .as_bytes()
+                    .to_vec(),
             }
         }
         Err(error) => get_error_response_for_announce(error).as_bytes().to_vec(),
     };
-    Ok(details)
+    details
+}
+
+fn extract_last_contents_of_response(
+    buffer: &[u8],
+    dic_torrents: &ArcMutexOfTorrents,
+    ip_port: &SocketAddr,
+) -> Result<(Vec<u8>, String), CommunicationError> {
+    let mut status_line = String::from(OK_URL);
+    let contents = if buffer.starts_with(GET_URL) {
+        fs::read(INDEX_HTML).map_err(|err| {
+            CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
+        })?
+    } else if buffer.starts_with(STATS_URL) {
+        fs::read(STATS_HTML).map_err(|err| {
+            CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
+        })?
+    } else if buffer.starts_with(STYLE_URL) {
+        fs::read(STYLE_CSS).map_err(|err| {
+            CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
+        })?
+    } else if buffer.starts_with(DOCS_URL) {
+        fs::read(DOCS_HTML).map_err(|err| {
+            CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
+        })?
+    } else if buffer.starts_with(CODE_URL) {
+        fs::read(CODE_JS).map_err(|err| {
+            CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
+        })?
+    } else if buffer.starts_with(JSON_URL) {
+        fs::read(JSON).map_err(|err| {
+            CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
+        })?
+    } else if buffer.starts_with(ANNOUNCE_URL) {
+        //[TODO] Almacenar datos importantes [en .json?]
+        get_response_details(buffer, dic_torrents, *ip_port)
+    } else {
+        status_line = String::from(ERR_URL);
+        fs::read(ERROR_HTML).map_err(|err| {
+            CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
+        })?
+    };
+    Ok((contents, status_line))
 }
 
 fn handle_single_connection(
     mut stream: TcpStream,
     dic_torrents: ArcMutexOfTorrents,
     ip_port: SocketAddr,
-) -> ResultDyn<()> {
+) -> Result<(), CommunicationError> {
     let mut buffer = [0; 1024];
     let _ = stream.read(&mut buffer);
-    let mut status_line = OK_URL;
 
-    let mut contents = if buffer.starts_with(GET_URL) {
-        fs::read(INDEX_HTML)?
-    } else if buffer.starts_with(STATS_URL) {
-        fs::read(STATS_HTML)?
-    } else if buffer.starts_with(STYLE_URL) {
-        fs::read(STYLE_CSS)?
-    } else if buffer.starts_with(DOCS_URL) {
-        fs::read(DOCS_HTML)?
-    } else if buffer.starts_with(CODE_URL) {
-        fs::read(CODE_JS)?
-    } else if buffer.starts_with(JSON_URL) {
-        fs::read(JSON)?
-    } else if buffer.starts_with(ANNOUNCE_URL) {
-        //[TODO] Almacenar datos importantes [en .json?]
-        get_response_details(&buffer, &dic_torrents, ip_port)?
+    let (mut contents, status_line) =
+        extract_last_contents_of_response(&buffer, &dic_torrents, &ip_port)?;
+
+    let result = if contents == ERROR_500.as_bytes().to_vec() {
+        Err(CommunicationError::UnlockingMutexOfTorrents)
     } else {
-        status_line = ERR_URL;
-        fs::read(ERROR_HTML)?
+        Ok(())
     };
+
     let mut response = format!(
         "{}\r\nContent-Length: {}\r\n\r\n",
         status_line,
@@ -92,9 +160,14 @@ fn handle_single_connection(
 
     response.append(&mut contents);
 
-    stream.write_all(&response)?;
-    stream.flush()?;
-    Ok(())
+    stream
+        .write_all(&response)
+        .map_err(|err| CommunicationError::WritingResponse(err.to_string()))?;
+    stream
+        .flush()
+        .map_err(|err| CommunicationError::WritingResponse(err.to_string()))?;
+
+    result
 }
 
 pub fn general_communication(
@@ -102,7 +175,7 @@ pub fn general_communication(
     mutex_of_torrents: ArcMutexOfTorrents,
     global_shutdown: Arc<RwLock<bool>>,
     number_threads: usize,
-) {
+) -> Result<(), CommunicationError> {
     let pool = ThreadPool::new(number_threads);
 
     loop {
@@ -115,12 +188,18 @@ pub fn general_communication(
                     sock_addr.ip(),
                     sock_addr.port()
                 );
-                pool.execute(move || {
-                    match handle_single_connection(stream, dic_copy, sock_addr) {
+                let global_shutdown_copy = Arc::clone(&global_shutdown);
+                pool.execute(
+                    move || match handle_single_connection(stream, dic_copy, sock_addr) {
                         Ok(_) => (),
-                        Err(error) => error!("{}", error), //Ver que hacer es casos de error
-                    }
-                });
+                        Err(CommunicationError::UnlockingMutexOfTorrents) => {
+                            let _ = set_global_shutdown(&global_shutdown_copy);
+                            error!("{}", CommunicationError::UnlockingMutexOfTorrents);
+                        }
+                        Err(err) => error!("{}", err),
+                    },
+                )
+                .map_err(|err| CommunicationError::PoolExecutionError(err.to_string()))?;
             }
             Err(error) => {
                 if error.kind() == ErrorKind::WouldBlock {
@@ -130,8 +209,12 @@ pub fn general_communication(
                     //Por cada vez que no conecto espero 1 seg a la siguiente request
                     //Para no estar loopeando tan rapidamente y que explote la maquina.
                     thread::sleep(Duration::from_secs(1));
+                } else {
+                    set_global_shutdown(&global_shutdown)?;
                 }
             }
         };
     }
+
+    Ok(())
 }

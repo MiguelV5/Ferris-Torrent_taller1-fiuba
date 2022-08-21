@@ -18,6 +18,7 @@ pub enum PeerInfoError {
     PortInvalid,
     StatNotFound,
     StatInvalid,
+    PoissonedLock,
 }
 
 impl fmt::Display for PeerInfoError {
@@ -255,6 +256,7 @@ pub fn get_error_response_for_announce(error: PeerInfoError) -> String {
         PeerInfoError::StatInvalid => ERROR_STAT_INVALID.to_owned(),
         PeerInfoError::PortNotFound => ERROR_STAT_NOT_FOUND.to_owned(),
         PeerInfoError::PortInvalid => ERROR_PORT_INVALID.to_owned(),
+        PeerInfoError::PoissonedLock => ERROR_500.to_owned(),
     }
 }
 

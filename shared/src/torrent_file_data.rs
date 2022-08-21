@@ -482,7 +482,7 @@ mod tests_torrent_file_data {
     #[test]
     fn test_torrent_single_file_ok() -> Result<(), Box<dyn Error>> {
         //ubuntu-14.04.6-server-ppc64el.iso [un solo archivo y un solo tracker]
-        let dir = "../ferris_tracker/torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
+        let dir = "../ferris_torrent/torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
 
         let dic_torrent = match medatada_analyzer::read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
@@ -519,7 +519,7 @@ mod tests_torrent_file_data {
 
     #[test]
     fn test_torrent_multiple_file_ok() -> Result<(), Box<dyn Error>> {
-        let dir = "../ferris_tracker/torrents_for_test/big-buck-bunny.torrent";
+        let dir = "../ferris_torrent/torrents_for_test/big-buck-bunny.torrent";
 
         let dic_torrent = match medatada_analyzer::read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
