@@ -118,6 +118,7 @@ pub enum InteractionHandlerError {
     UiError(String),
     CalculatingTime(String),
     PiecesHandler(String),
+    RecommunicatingWithTracker(String),
 }
 
 impl fmt::Display for InteractionHandlerError {

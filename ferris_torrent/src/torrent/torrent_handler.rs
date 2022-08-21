@@ -83,9 +83,13 @@ fn handle_torrent(
     let peer_id = generate_peer_id();
 
     info!("Iniciando comunicacion con tracker");
-    let tracker_response =
-        http_handler::communicate_with_tracker(&torrent_file, config_data, peer_id.clone())
-            .map_err(TorrentHandlerError::CommunicationWithTracker)?;
+    let tracker_response = http_handler::communicate_with_tracker(
+        &torrent_status,
+        &torrent_file,
+        config_data,
+        peer_id.clone(),
+    )
+    .map_err(TorrentHandlerError::CommunicationWithTracker)?;
     info!("Comunicacion con el tracker exitosa");
 
     ui_sender_handler::update_torrent_information(

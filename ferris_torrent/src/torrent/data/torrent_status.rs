@@ -90,6 +90,18 @@ impl TorrentStatus {
         self.uploaded
     }
 
+    pub fn get_left_bytes(&self) -> u64 {
+        self.left
+    }
+
+    pub fn get_event_as_string(&self) -> String {
+        match self.event {
+            StateOfDownload::Started => String::from("started"),
+            StateOfDownload::Completed => String::from("completed"),
+            StateOfDownload::Stopped => String::from("stopped"),
+        }
+    }
+
     pub fn get_porcentage_downloaded(&self) -> Result<f64, TorrentStatusError> {
         let left = self.left;
         let downloaded = u32::try_from(self.downloaded).map_err(|err| {

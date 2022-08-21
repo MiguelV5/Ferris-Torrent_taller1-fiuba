@@ -75,11 +75,7 @@ fn from_vec_to_port(result: Option<Vec<u8>>) -> Result<u64, PeerInfoError> {
         Some(vec) => {
             let str_port = String::from_utf8_lossy(&vec).to_string();
             if let Ok(port_num) = str_port.parse::<u64>() {
-                if RANGE_PORT.contains(&port_num) {
-                    Ok(port_num)
-                } else {
-                    Err(PeerInfoError::PortInvalid)
-                }
+                Ok(port_num)
             } else {
                 Err(PeerInfoError::PortInvalid)
             }

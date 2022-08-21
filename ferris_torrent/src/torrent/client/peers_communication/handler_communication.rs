@@ -5,6 +5,7 @@
 use log::{debug, info};
 
 use crate::torrent::client::pieces_assembling_handler;
+use crate::torrent::client::tracker_communication::http_handler;
 use crate::torrent::data::config_file_data::ConfigFileData;
 use crate::torrent::data::{
     torrent_status::TorrentStatus, tracker_response_data::TrackerResponseData,
@@ -33,7 +34,7 @@ type ExternalPeerAddres = String;
 
 pub const BLOCK_BYTES: u32 = 16384; //2^14 bytes
 
-pub const PUBLIC_IP: &str = "0.0.0.0:";
+pub const PUBLIC_IP: &str = "127.0.0.1:";
 
 fn generate_address(config_data: &ConfigFileData) -> String {
     let address = PUBLIC_IP.to_string();
@@ -231,7 +232,7 @@ fn handle_interaction_starting_as_client(
     let (torrent_file_data, tracker_response, config_data, peer_id) = read_only_data;
     thread::spawn(move || loop {
         if list_connected_peers.is_empty() {
-            set_shut_down(local_shut_down)?;
+            //set_shut_down(local_shut_down)?;
             return Err(InteractionHandlerError::ConectingWithPeer(
                 "No peers left to connect.".to_string(),
             ));
@@ -286,10 +287,26 @@ fn handle_interaction_starting_as_client(
                     &torrent_file_data,
                 )
                 .map_err(|err| InteractionHandlerError::PiecesHandler(format!("{}", err)))?;
+
                 let mut local_shut_down = local_shut_down
                     .write()
                     .map_err(|err| InteractionHandlerError::UiError(format!("{}", err)))?;
                 *local_shut_down = true;
+
+                let torrent_status = torrent_status.read().map_err(|error| {
+                    InteractionHandlerError::RecommunicatingWithTracker(format!("{:?}", error))
+                })?;
+
+                http_handler::communicate_with_tracker(
+                    &torrent_status,
+                    &torrent_file_data,
+                    &config_data,
+                    peer_id.clone(),
+                )
+                .map_err(|err| {
+                    InteractionHandlerError::RecommunicatingWithTracker(err.to_string())
+                })?;
+
                 Ok(())
             }
             Ok(InteractionHandlerStatus::LookForAnotherPeer) => {
