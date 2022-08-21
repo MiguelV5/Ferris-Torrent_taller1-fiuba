@@ -171,7 +171,7 @@ mod tests_config_file {
             Ok(config) => config,
             Err(error) => return Err(error),
         };
-        assert_eq!(config.port, 6881);
+        assert_eq!(config.port, 6889);
         assert_eq!(config.download_path, "ferris_torrent/results/download");
         assert_eq!(config.log_path, "ferris_torrent/results/logs");
         Ok(())

@@ -525,7 +525,7 @@ mod tests_http_handler {
         let mut msg_get_expected = String::from("GET /announce");
         msg_get_expected.push_str("?info_hash=");
         msg_get_expected.push_str(&info_hash);
-        msg_get_expected.push_str("&peer_id=ABCDEFGHIJKLMNOPQRST&ip=127.0.0.1&port=6881");
+        msg_get_expected.push_str("&peer_id=ABCDEFGHIJKLMNOPQRST&ip=127.0.0.1&port=6889");
         msg_get_expected.push_str("&uploaded=0&downloaded=0&left=");
         msg_get_expected.push_str(&torrent.get_total_length().to_string());
         msg_get_expected.push_str("&event=started HTTP/1.0\r\nHost:torrent.ubuntu.com\r\n\r\n");
