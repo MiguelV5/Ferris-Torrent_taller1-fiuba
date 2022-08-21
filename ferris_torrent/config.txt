@@ -1,3 +1,3 @@
-port 6881
+port 6889
 download ferris_torrent/results/download
 logs ferris_torrent/results/logs
