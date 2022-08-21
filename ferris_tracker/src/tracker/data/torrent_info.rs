@@ -2,6 +2,12 @@ use super::{constants::*, peer_info::PeerInfo};
 use shared::parsers::bencoding::{self, values::ValuesBencoding};
 use std::collections::HashMap;
 
+pub enum StatusPeer {
+    NewPeer,
+    NoChanges,
+    ChangeToCompleted,
+}
+
 pub struct TorrentInfo {
     info_hash: Vec<u8>,
     interval: i64,
@@ -24,14 +30,19 @@ impl TorrentInfo {
         self.info_hash.clone()
     }
 
-    /// Devuelve un bool que indica si el peer a agregar es nuevo (true) o no (false, si ya estaba en el torrent)
-    pub fn add_peer(&mut self, peer_id: Vec<u8>, peer_info: PeerInfo) -> bool {
-        let mut is_new_peer = true;
-        if self.peers.contains_key(&peer_id) {
-            is_new_peer = false;
+    /// Agrega el peer al torrent y devuelve el StatusPeer, que nos informa si el peer es nuevo
+    /// o si el peer es ya lo tenia, si ya lo tenia me informa si tuvo un cambio a completed
+    ///  o si no tuvo ningun camnio importante.
+    pub fn add_peer(&mut self, peer_id: Vec<u8>, peer_info: PeerInfo) -> StatusPeer {
+        let mut result = StatusPeer::NewPeer;
+        if let Some(peer) = self.peers.get(&peer_id) {
+            result = StatusPeer::NoChanges;
+            if !peer.is_complete() && peer_info.is_complete() {
+                result = StatusPeer::ChangeToCompleted;
+            };
         }
         self.peers.insert(peer_id, peer_info);
-        is_new_peer
+        result
     }
 
     fn get_number_of_complete_and_incomplete_peers(&self) -> (i64, i64) {

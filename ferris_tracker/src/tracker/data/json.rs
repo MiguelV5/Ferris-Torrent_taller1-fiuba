@@ -90,6 +90,21 @@ impl Json {
             }
         }
     }
+    pub fn add_only_completed(&mut self) {
+        let date = Local::now();
+        let date_now_str = date.format("%Y-%m-%d %H:%M:%S").to_string();
+        self.times.push(date_now_str);
+
+        if let Some(last_num) = self.connections.last() {
+            let new = last_num.to_owned();
+            self.connections.push(new);
+        }
+
+        if let Some(last_num) = self.completed.last() {
+            let new_value = last_num.to_owned() + 1;
+            self.completed.push(new_value);
+        }
+    }
     pub fn get_json_string(&self) -> String {
         let json_struct = json!({
             TORRENTS: self.torrents,

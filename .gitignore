@@ -13,8 +13,8 @@ Cargo.lock
 # Added by cargo
 /target
 
-ferris_torrent/result/logs/*.txt
-ferris_torrent/result/download/*
+ferris_torrent/results/logs/*.txt
+ferris_torrent/results/download/*
 
 temp/*
 

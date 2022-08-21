@@ -16,6 +16,7 @@ use crate::{
             constants::*,
             json::Json,
             peer_info::{get_error_response_for_announce, PeerInfo, PeerInfoError},
+            torrent_info::StatusPeer,
         },
         thread_pool::ThreadPool,
     },
@@ -77,21 +78,38 @@ fn get_response_details(
                             info_of_announced_peer.get_peer_id(),
                             info_of_announced_peer.is_compact(),
                         );
-                        if torrent
+                        match torrent
                             .add_peer(info_of_announced_peer.get_peer_id(), info_of_announced_peer)
                         {
-                            match json.write() {
-                                Ok(mut unlocked_json) => {
-                                    unlocked_json.add_new_connection(peer_is_completed);
-                                }
-                                Err(_) => {
-                                    return get_error_response_for_announce(
-                                        PeerInfoError::PoissonedLock,
-                                    )
-                                    .as_bytes()
-                                    .to_vec();
-                                }
-                            };
+                            StatusPeer::NewPeer => {
+                                match json.write() {
+                                    Ok(mut unlocked_json) => {
+                                        unlocked_json.add_new_connection(peer_is_completed);
+                                    }
+                                    Err(_) => {
+                                        return get_error_response_for_announce(
+                                            PeerInfoError::PoissonedLock,
+                                        )
+                                        .as_bytes()
+                                        .to_vec();
+                                    }
+                                };
+                            }
+                            StatusPeer::ChangeToCompleted => {
+                                match json.write() {
+                                    Ok(mut unlocked_json) => {
+                                        unlocked_json.add_only_completed();
+                                    }
+                                    Err(_) => {
+                                        return get_error_response_for_announce(
+                                            PeerInfoError::PoissonedLock,
+                                        )
+                                        .as_bytes()
+                                        .to_vec();
+                                    }
+                                };
+                            }
+                            StatusPeer::NoChanges => (),
                         };
                         response
                     }
