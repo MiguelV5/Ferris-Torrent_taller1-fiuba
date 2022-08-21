@@ -11,13 +11,15 @@ use native_tls::TlsConnector;
 use super::constants::*;
 use crate::torrent::data::{
     config_file_data::ConfigFileData,
-    torrent_file_data::TorrentFileData,
     tracker_response_data::{ResponseError, TrackerResponseData},
 };
 
-use shared::parsers::{
-    bencoding::{self, values::ValuesBencoding},
-    urlencoding::{self},
+use shared::{
+    parsers::{
+        bencoding::{self, values::ValuesBencoding},
+        urlencoding::{self},
+    },
+    torrent_file_data::TorrentFileData,
 };
 
 use log::{debug, error, trace};
@@ -493,10 +495,10 @@ pub fn communicate_with_tracker(
 
 #[cfg(test)]
 mod tests_http_handler {
+    use shared::medatada_analyzer::read_torrent_file_to_dic;
+
     use super::*;
-    use crate::torrent::{
-        client::medatada_analyzer::read_torrent_file_to_dic, data::config_file_data::ConfigFileData,
-    };
+    use crate::torrent::data::config_file_data::ConfigFileData;
 
     #[test]
     fn test_creation_file1_ok() -> Result<(), Box<dyn Error>> {

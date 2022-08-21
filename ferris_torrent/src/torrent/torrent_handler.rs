@@ -4,7 +4,7 @@
 
 use crate::torrent::{
     client::{
-        entry_files_management, medatada_analyzer,
+        entry_files_management,
         peers_communication::{self, local_peer_communicator::generate_peer_id},
         tracker_communication::http_handler,
     },
@@ -15,6 +15,10 @@ use crate::torrent::{
 use core::fmt;
 use gtk::glib::Sender as UiSender;
 use log::{debug, info, trace};
+use shared::{
+    medatada_analyzer::{self, MetadataError},
+    torrent_file_data::TorrentFileData,
+};
 use std::{
     error::Error,
     sync::{mpsc::Sender as LoggerSender, Arc, RwLock},
@@ -23,12 +27,10 @@ use std::{
 
 use super::{
     client::{
-        medatada_analyzer::MetadataError,
         peers_communication::local_peer_communicator::InteractionHandlerError,
         pieces_assembling_handler::PiecesAssemblerError,
         tracker_communication::http_handler::ErrorMsgHttp,
     },
-    data::torrent_file_data::TorrentFileData,
     logger::LogError,
     user_interface::ui_sender_handler::UiError,
 };

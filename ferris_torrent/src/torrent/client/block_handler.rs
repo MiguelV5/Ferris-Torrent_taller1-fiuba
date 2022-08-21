@@ -3,11 +3,10 @@
 //! recibidos de mensajes de tipo "Piece" en medio de interacciones individuales
 //! con peers.
 
-use crate::torrent::data::torrent_file_data::TorrentFileData;
-
 use core::fmt;
 use log::info;
 use sha1::{Digest, Sha1};
+use shared::torrent_file_data::TorrentFileData;
 use std::{
     error::Error,
     fs::{self, OpenOptions},

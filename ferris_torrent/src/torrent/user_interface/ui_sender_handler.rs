@@ -3,10 +3,11 @@ use std::{error::Error, net::SocketAddr, time::Duration};
 
 use super::constants::{MessageUI, State, TorrentFileType, TypeOfChange};
 use crate::torrent::data::{
-    peer_data_for_communication::PeerDataForP2PCommunication, torrent_file_data::TorrentFileData,
-    torrent_status::TorrentStatus, tracker_response_data::TrackerResponseData,
+    peer_data_for_communication::PeerDataForP2PCommunication, torrent_status::TorrentStatus,
+    tracker_response_data::TrackerResponseData,
 };
 use gtk::glib::Sender;
+use shared::torrent_file_data::TorrentFileData;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum UiError {

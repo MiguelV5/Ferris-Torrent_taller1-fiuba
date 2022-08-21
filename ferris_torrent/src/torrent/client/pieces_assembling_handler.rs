@@ -2,9 +2,9 @@
 //! Este modulo contiene las funciones encargadas de controlar todo el ensamblado de piezas a un único archivo.
 //!
 
-use crate::torrent::data::torrent_file_data::{TargetFilesData, TorrentFileData};
 use core::fmt;
 use log::info;
+use shared::torrent_file_data::{TargetFilesData, TorrentFileData};
 use std::{
     error::Error,
     fs::{self, File, OpenOptions},
@@ -136,6 +136,8 @@ pub fn assemble_all_completed_pieces(
 #[cfg(test)]
 mod tests_pieces_handler {
     use std::{error::Error, io};
+
+    use shared::torrent_file_data::TorrentFileData;
 
     use super::*;
 

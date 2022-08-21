@@ -7,12 +7,12 @@ use log::{debug, info};
 use crate::torrent::client::pieces_assembling_handler;
 use crate::torrent::data::config_file_data::ConfigFileData;
 use crate::torrent::data::{
-    torrent_file_data::TorrentFileData, torrent_status::TorrentStatus,
-    tracker_response_data::TrackerResponseData,
+    torrent_status::TorrentStatus, tracker_response_data::TrackerResponseData,
 };
 use crate::torrent::user_interface::constants::MessageUI;
 use crate::torrent::user_interface::ui_sender_handler;
 use gtk::glib::Sender as UiSender;
+use shared::torrent_file_data::TorrentFileData;
 use std::net::TcpListener;
 use std::sync::mpsc::Sender as LoggerSender;
 use std::sync::{Arc, RwLock};

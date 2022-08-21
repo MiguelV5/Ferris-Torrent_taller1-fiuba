@@ -4,7 +4,6 @@
 
 pub mod block_handler;
 pub mod entry_files_management;
-pub mod medatada_analyzer;
 pub mod peers_communication;
 pub mod pieces_assembling_handler;
 pub mod tracker_communication;

@@ -7,11 +7,9 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::{collections::HashMap, error::Error, fmt};
 
-use crate::torrent::client::peers_communication::handler_communication::BLOCK_BYTES;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
-use shared::parsers::p2p::message::PieceStatus;
-use shared::parsers::{bencoding::values::ValuesBencoding, *};
+use crate::parsers::p2p::message::PieceStatus;
+use crate::parsers::{bencoding::values::ValuesBencoding, *};
+use rand::{seq::SliceRandom, thread_rng};
 type DicValues = HashMap<Vec<u8>, ValuesBencoding>;
 
 const ANNOUNCE: &str = "announce";
@@ -23,6 +21,8 @@ const FILES: &str = "files";
 const NAME: &str = "name";
 const PIECES: &str = "pieces";
 const PATH: &str = "path";
+
+const BLOCK_BYTES: u32 = 16384; //2^14 bytes
 
 #[derive(Debug, PartialEq, Eq)]
 ///Enumerado que representa la seccion en la que el error puede surgir
@@ -477,14 +477,14 @@ impl TorrentFileData {
 #[cfg(test)]
 mod tests_torrent_file_data {
     use super::*;
-    use crate::torrent::client::medatada_analyzer::read_torrent_file_to_dic;
+    use crate::medatada_analyzer;
 
     #[test]
     fn test_torrent_single_file_ok() -> Result<(), Box<dyn Error>> {
         //ubuntu-14.04.6-server-ppc64el.iso [un solo archivo y un solo tracker]
-        let dir = "torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
+        let dir = "../ferris_tracker/torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
 
-        let dic_torrent = match read_torrent_file_to_dic(dir) {
+        let dic_torrent = match medatada_analyzer::read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
             Err(error) => return Err(Box::new(error)),
         };
@@ -519,9 +519,9 @@ mod tests_torrent_file_data {
 
     #[test]
     fn test_torrent_multiple_file_ok() -> Result<(), Box<dyn Error>> {
-        let dir = "torrents_for_test/big-buck-bunny.torrent";
+        let dir = "../ferris_tracker/torrents_for_test/big-buck-bunny.torrent";
 
-        let dic_torrent = match read_torrent_file_to_dic(dir) {
+        let dic_torrent = match medatada_analyzer::read_torrent_file_to_dic(dir) {
             Ok(dic_torrent) => dic_torrent,
             Err(error) => return Err(Box::new(error)),
         };

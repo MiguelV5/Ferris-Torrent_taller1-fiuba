@@ -4,9 +4,12 @@
 
 use log::info;
 
-use crate::torrent::data::{torrent_file_data::TorrentFileData, torrent_status::TorrentStatus};
+use crate::torrent::data::torrent_status::TorrentStatus;
 
-use shared::parsers::{p2p, p2p::constants::PSTR_STRING_HANDSHAKE, p2p::message::P2PMessage};
+use shared::{
+    parsers::{p2p, p2p::constants::PSTR_STRING_HANDSHAKE, p2p::message::P2PMessage},
+    torrent_file_data::TorrentFileData,
+};
 
 use core::fmt;
 use std::{error::Error, io::Write, net::TcpStream};
@@ -238,7 +241,6 @@ mod test_msg_sender {
         },
         data::{
             peer_data_for_communication::PeerDataForP2PCommunication,
-            torrent_file_data::{TargetFilesData, TorrentFileData},
             torrent_status::{StateOfDownload, TorrentStatus},
             tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
         },
@@ -251,6 +253,7 @@ mod test_msg_sender {
             message::{P2PMessage, PieceStatus},
         },
         port_binder::listener_binder::*,
+        torrent_file_data::TargetFilesData,
     };
 
     use std::{

@@ -11,9 +11,7 @@ use crate::torrent::client::peers_communication::{
     handler_communication::BLOCK_BYTES, local_peer_communicator::LocalPeerCommunicator,
 };
 
-use shared::parsers::p2p::message::PieceStatus;
-
-use super::torrent_file_data::TorrentFileData;
+use shared::{parsers::p2p::message::PieceStatus, torrent_file_data::TorrentFileData};
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 /// Representa el estado de la descarga COMPLETA del torrent

@@ -10,16 +10,18 @@ use crate::torrent::{
         peers_communication::{msg_receiver, msg_sender},
     },
     data::{
-        peer_data_for_communication::PeerDataForP2PCommunication,
-        torrent_file_data::TorrentFileData, torrent_status::TorrentStatus,
+        peer_data_for_communication::PeerDataForP2PCommunication, torrent_status::TorrentStatus,
         tracker_response_data::TrackerResponseData,
     },
     user_interface::{constants::MessageUI, ui_sender_handler},
 };
 
-use shared::parsers::p2p::{
-    constants::PSTR_STRING_HANDSHAKE,
-    message::{P2PMessage, PieceStatus},
+use shared::{
+    parsers::p2p::{
+        constants::PSTR_STRING_HANDSHAKE,
+        message::{P2PMessage, PieceStatus},
+    },
+    torrent_file_data::TorrentFileData,
 };
 
 use gtk::glib::Sender as UiSender;
@@ -1284,7 +1286,6 @@ mod test_local_peer {
     };
 
     use crate::torrent::data::{
-        torrent_file_data::{TargetFilesData, TorrentFileData},
         torrent_status::{StateOfDownload, TorrentStatus},
         tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
     };
@@ -1295,6 +1296,7 @@ mod test_local_peer {
             message::{P2PMessage, PieceStatus},
         },
         port_binder::listener_binder::*,
+        torrent_file_data::TargetFilesData,
     };
 
     #[derive(PartialEq, Eq, Debug, Clone)]

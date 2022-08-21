@@ -2,11 +2,12 @@
 //! Este modulo contiene las funciones encargadas de leer, analizar e interpretar
 //! la metadata de un archivo .torrent para su posterior uso.
 
-use crate::torrent::data::torrent_file_data::{TorrentFileData, TorrentFileDataError};
-
-use shared::parsers::bencoding::{
-    self,
-    values::{ErrorBencoding, ValuesBencoding},
+use crate::{
+    parsers::bencoding::{
+        self,
+        values::{ErrorBencoding, ValuesBencoding},
+    },
+    torrent_file_data::{TorrentFileData, TorrentFileDataError},
 };
 
 use log::{error, trace};
@@ -106,11 +107,10 @@ pub fn create_torrent(torrent_path: &str) -> Result<TorrentFileData, MetadataErr
 #[cfg(test)]
 mod tests_metadata_analyzer {
     use super::*;
-    use shared::parsers::bencoding;
 
     #[test]
     fn read_torrent1_ok() -> Result<(), Box<dyn Error>> {
-        let file_dir = "torrents_for_test/ubuntu-22.04-desktop-amd64.iso.torrent";
+        let file_dir = "../ferris_torrent/torrents_for_test/ubuntu-22.04-desktop-amd64.iso.torrent";
         match read_torrent_file(file_dir) {
             Ok(torrent_metadata) => {
                 match bencoding::decoder::from_torrent_to_dic(torrent_metadata.clone()) {
@@ -127,7 +127,7 @@ mod tests_metadata_analyzer {
     }
     #[test]
     fn read_torrent2_ok() -> Result<(), Box<dyn Error>> {
-        let file_dir = "torrents_for_test/big-buck-bunny.torrent";
+        let file_dir = "../ferris_torrent/torrents_for_test/big-buck-bunny.torrent";
         match read_torrent_file(file_dir) {
             Ok(torrent_metadata) => {
                 match bencoding::decoder::from_torrent_to_dic(torrent_metadata.clone()) {
@@ -144,7 +144,8 @@ mod tests_metadata_analyzer {
     }
     #[test]
     fn read_torrent3_ok() -> Result<(), Box<dyn Error>> {
-        let file_dir = "torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
+        let file_dir =
+            "../ferris_torrent/torrents_for_test/ubuntu-14.04.6-server-ppc64el.iso.torrent";
         match read_torrent_file(file_dir) {
             Ok(torrent_metadata) => {
                 match bencoding::decoder::from_torrent_to_dic(torrent_metadata.clone()) {
@@ -161,13 +162,13 @@ mod tests_metadata_analyzer {
     }
     #[test]
     fn read_no_file() {
-        let file_dir = "torrents_for_test/torrent_no_existente.torrent";
+        let file_dir = "../ferris_torrent/torrents_for_test/torrent_no_existente.torrent";
         let metadata = read_torrent_file(file_dir);
         assert_eq!(metadata, Err(MetadataError::FileNotFound))
     }
     #[test]
     fn read_file_other_format() {
-        let file_dir = "torrents_for_test/torrent_no_existente.iso";
+        let file_dir = "../ferris_torrent/torrents_for_test/torrent_no_existente.iso";
         let metadata = read_torrent_file(file_dir);
         assert_eq!(metadata, Err(MetadataError::IsNotTorrent))
     }

@@ -4,6 +4,5 @@
 
 pub mod config_file_data;
 pub mod peer_data_for_communication;
-pub mod torrent_file_data;
 pub mod torrent_status;
 pub mod tracker_response_data;

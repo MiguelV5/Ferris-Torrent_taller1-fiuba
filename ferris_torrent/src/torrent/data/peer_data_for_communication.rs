@@ -5,9 +5,7 @@
 
 use std::{error::Error, fmt};
 
-use super::torrent_file_data::TorrentFileData;
-
-use shared::parsers::p2p::message::PieceStatus;
+use shared::{parsers::p2p::message::PieceStatus, torrent_file_data::TorrentFileData};
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum PeerDataForP2PCommunicationError {

@@ -101,8 +101,9 @@ pub fn general_communication(
     listener: TcpListener,
     mutex_of_torrents: ArcMutexOfTorrents,
     global_shutdown: Arc<RwLock<bool>>,
+    number_threads: usize,
 ) {
-    let pool = ThreadPool::new(4);
+    let pool = ThreadPool::new(number_threads);
 
     loop {
         match listener.accept() {

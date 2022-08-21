@@ -9,7 +9,6 @@ use ferris_torrent::torrent::{
         msg_receiver,
     },
     data::{
-        torrent_file_data::{TargetFilesData, TorrentFileData},
         torrent_status::{StateOfDownload, TorrentStatus},
         tracker_response_data::{PeerDataFromTrackerResponse, TrackerResponseData},
     },
@@ -22,6 +21,7 @@ use shared::{
         p2p::message::{P2PMessage, PieceStatus},
     },
     port_binder::listener_binder::*,
+    torrent_file_data::{TargetFilesData, TorrentFileData},
 };
 
 use gtk::glib;
