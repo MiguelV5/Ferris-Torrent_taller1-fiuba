@@ -1,3 +1,11 @@
+const zero = 0;
+const one = 1;
+const two = 2;
+const five = 5;
+const aDay = 24;
+const threeDays = 72;
+
+var cantTorrentsInJson = zero;
 var timesInJson = [];
 var connectionsInJson = [];
 var completedInJson = [];
@@ -5,8 +13,9 @@ var completedInJson = [];
 var arrayTimes = [];
 var arrayConnections = [];
 var arrayCompleted = [];
+var arrayTorrents = [];
 
-var howFarInTime = 1;
+var howFarInTime = one;
 var leapsInTime = "Hours"
 
 var lineChart;
@@ -15,9 +24,9 @@ function isInTime(time,betweenTime) {
   let firstTime = new Date(betweenTime.getTime());
   let lastTime = new Date(betweenTime.getTime());
   if (leapsInTime == "Hours"){
-    lastTime.setHours(betweenTime.getHours() + 1);
+    lastTime.setHours(betweenTime.getHours() + one);
   } else {
-    lastTime.setMinutes(betweenTime.getMinutes() + 1);
+    lastTime.setMinutes(betweenTime.getMinutes() + one);
   }
 
   if (time >= firstTime && time < lastTime) {
@@ -31,16 +40,17 @@ function searchConnections() {
   arrayTimes = [];
   arrayConnections = [];
   arrayCompleted = [];
+  arrayTorrents = [];
 
-  let cantConnectedNow = 0;
-  let cantCompletedNow = 0;
-  let pos = 0;
+  let cantConnectedNow = zero;
+  let cantCompletedNow = zero;
+  let pos = zero;
   let now = new Date();
   let startingTime = new Date();
   startingTime.setHours(now.getHours() - howFarInTime);
 
   while (new Date(timesInJson[pos]) < startingTime){
-    pos += 1;
+    pos += one;
     if (pos < timesInJson.length) {
       cantConnectedNow = connectionsInJson[pos];
       cantCompletedNow = completedInJson[pos];
@@ -54,7 +64,7 @@ function searchConnections() {
       if (isInTime(new Date(timeInJson), startingTime)){
         cantConnectedNow = connectionsInJson[pos];
         cantCompletedNow = completedInJson[pos];
-        pos = pos + 1;
+        pos = pos + one;
         keepSearching = pos < timesInJson.length;
       } else {
         keepSearching = false;
@@ -62,13 +72,14 @@ function searchConnections() {
     }
 
     arrayTimes.push(new Date(startingTime.getTime()));
+    arrayTorrents.push(cantTorrentsInJson);
     arrayConnections.push(cantConnectedNow);
     arrayCompleted.push(cantCompletedNow);
 
     if (leapsInTime == "Hours"){
-      startingTime.setHours(startingTime.getHours() + 1);
+      startingTime.setHours(startingTime.getHours() + one);
     } else {
-      startingTime.setMinutes(startingTime.getMinutes() + 1);
+      startingTime.setMinutes(startingTime.getMinutes() + one);
     }
   }
 }
@@ -76,6 +87,7 @@ function searchConnections() {
 fetch('database.json')
   .then(response => response.json())
   .then(result => {
+    cantTorrentsInJson = result.torrents;
     timesInJson = result.times;
     connectionsInJson = result.connections;
     completedInJson = result.completed;
@@ -88,7 +100,7 @@ fetch('database.json')
         labels: arrayTimes,
         datasets: [{
           label: 'Conexiones activas',
-          lineTension: 0,
+          lineTension: zero,
           borderColor: 'rgba(0,0,255,1)',
           backgroundColor: 'rgba(0,0,255,0.3)',
           fill: true,
@@ -96,11 +108,19 @@ fetch('database.json')
         },
         {
           label: 'Conexiones completas',
-          lineTension: 0,
+          lineTension: zero,
           borderColor: 'rgba(255,0,0,1)',
           backgroundColor: 'rgba(255,0,0,0.3)',
           fill: true,
           data: arrayCompleted
+        },
+        {
+          label: 'Cantidad Torrents',
+          lineTension: zero,
+          borderColor: 'rgba(0,255,0,1)',
+          backgroundColor: 'rgba(0,255,0,0.3)',
+          fill: true,
+          data: arrayTorrents
         }
       ]
       },
@@ -141,26 +161,28 @@ function alertLeapsTime() {
     leapsInTime = "Minutes";
   }
   searchConnections();
-  lineChart.data.labels = arrayTimes
-  lineChart.data.datasets[0].data = arrayConnections
-  lineChart.data.datasets[1].data = arrayCompleted
+  lineChart.data.labels = arrayTimes;
+  lineChart.data.datasets[zero].data = arrayConnections;
+  lineChart.data.datasets[one].data = arrayCompleted;
+  lineChart.data.datasets[two].data = arrayTorrents;
   lineChart.update();
 }
 function alertLongTime() {
   let select = document.getElementById('howLongTime');
   let text = select.options[select.selectedIndex].text;
   if (text == 'Last hour') {
-    howFarInTime = 1;
+    howFarInTime = one;
   } else if (text == 'Last five hours') {
-    howFarInTime = 5;
+    howFarInTime = five;
   } else if (text == 'Last day') {
-    howFarInTime = 24;
+    howFarInTime = aDay;
   } else {
-    howFarInTime = 72;
+    howFarInTime = threeDays;
   }
   searchConnections();
-  lineChart.data.labels = arrayTimes
-  lineChart.data.datasets[0].data = arrayConnections
-  lineChart.data.datasets[1].data = arrayCompleted
+  lineChart.data.labels = arrayTimes;
+  lineChart.data.datasets[zero].data = arrayConnections;
+  lineChart.data.datasets[one].data = arrayCompleted;
+  lineChart.data.datasets[two].data = arrayTorrents;
   lineChart.update();
 }
