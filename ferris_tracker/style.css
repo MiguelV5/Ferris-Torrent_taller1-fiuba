@@ -80,7 +80,7 @@ body {
     font-size: 36px;
     margin-top: 20px;
     position: absolute;
-    top: -150px;
+    top: -200px;
     left: 200px;
 }
 
@@ -93,10 +93,10 @@ body {
 
 #lineGraph {
     margin: 20px;
-    max-width: 700px;
-    max-height: 500px;
+    max-width: 900px;
+    max-height: 600px;
     position: absolute;
-    top: -80px;
+    top: -160px;
     left: 40px;
     background: #ffffff;
     border-style: outset;
@@ -106,16 +106,16 @@ body {
 
 #howLongTime {
     margin: 20px;
-    position: relative;
-    top: 20px;
+    position: absolute;
+    top: 320px;
     left: 150px;
 }
 
 #leapsTime {
     margin: 20px;
-    position: relative;
-    top: 50px;
-    left: -23px;
+    position: absolute;
+    top: 320px;
+    left: 280px;
 }
 
 button {

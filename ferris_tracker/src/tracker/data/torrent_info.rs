@@ -24,8 +24,14 @@ impl TorrentInfo {
         self.info_hash.clone()
     }
 
-    pub fn add_peer(&mut self, peer_id: Vec<u8>, peer_info: PeerInfo) {
+    /// Devuelve un bool que indica si el peer a agregar es nuevo (true) o no (false, si ya estaba en el torrent)
+    pub fn add_peer(&mut self, peer_id: Vec<u8>, peer_info: PeerInfo) -> bool {
+        let mut is_new_peer = true;
+        if self.peers.contains_key(&peer_id) {
+            is_new_peer = false;
+        }
         self.peers.insert(peer_id, peer_info);
+        is_new_peer
     }
 
     fn get_number_of_complete_and_incomplete_peers(&self) -> (i64, i64) {

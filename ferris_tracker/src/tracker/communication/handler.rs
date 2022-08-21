@@ -14,6 +14,7 @@ use crate::{
     tracker::{
         data::{
             constants::*,
+            json::Json,
             peer_info::{get_error_response_for_announce, PeerInfo, PeerInfoError},
         },
         thread_pool::ThreadPool,
@@ -28,6 +29,7 @@ pub enum CommunicationError {
     ReadingFilesToFillResponseContentError(String),
     WritingResponse(String),
     UnlockingMutexOfTorrents,
+    ReadingPeerSocket(String),
 }
 
 impl fmt::Display for CommunicationError {
@@ -59,13 +61,15 @@ pub fn set_global_shutdown(global_shutdown: &Arc<RwLock<bool>>) -> Result<(), Co
 fn get_response_details(
     buffer: &[u8],
     dic_torrents: &ArcMutexOfTorrents,
+    json: &Arc<RwLock<Json>>,
     ip_port: SocketAddr,
 ) -> Vec<u8> {
     let info_of_announced_peer = PeerInfo::new((*buffer).to_vec(), ip_port);
 
-    let details = match info_of_announced_peer {
+    match info_of_announced_peer {
         Ok(info_of_announced_peer) => {
             let info_hash = info_of_announced_peer.get_info_hash();
+            let peer_is_completed = info_of_announced_peer.is_complete();
             match dic_torrents.write() {
                 Ok(mut unlocked_dic) => match unlocked_dic.get_mut(&info_hash) {
                     Some(torrent) => {
@@ -73,8 +77,22 @@ fn get_response_details(
                             info_of_announced_peer.get_peer_id(),
                             info_of_announced_peer.is_compact(),
                         );
-                        torrent
-                            .add_peer(info_of_announced_peer.get_peer_id(), info_of_announced_peer);
+                        if torrent
+                            .add_peer(info_of_announced_peer.get_peer_id(), info_of_announced_peer)
+                        {
+                            match json.write() {
+                                Ok(mut unlocked_json) => {
+                                    unlocked_json.add_new_connection(peer_is_completed);
+                                }
+                                Err(_) => {
+                                    return get_error_response_for_announce(
+                                        PeerInfoError::PoissonedLock,
+                                    )
+                                    .as_bytes()
+                                    .to_vec();
+                                }
+                            };
+                        };
                         response
                     }
                     None => get_error_response_for_announce(PeerInfoError::InfoHashInvalid)
@@ -87,13 +105,13 @@ fn get_response_details(
             }
         }
         Err(error) => get_error_response_for_announce(error).as_bytes().to_vec(),
-    };
-    details
+    }
 }
 
 fn extract_last_contents_of_response(
     buffer: &[u8],
     dic_torrents: &ArcMutexOfTorrents,
+    json: &Arc<RwLock<Json>>,
     ip_port: &SocketAddr,
 ) -> Result<(Vec<u8>, String), CommunicationError> {
     let mut status_line = String::from(OK_URL);
@@ -118,12 +136,13 @@ fn extract_last_contents_of_response(
             CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
         })?
     } else if buffer.starts_with(JSON_URL) {
-        fs::read(JSON).map_err(|err| {
-            CommunicationError::ReadingFilesToFillResponseContentError(err.to_string())
-        })?
+        match json.read() {
+            Ok(unlocked_json) => unlocked_json.get_json_string().as_bytes().to_vec(),
+            Err(_err) => ERROR_500.as_bytes().to_vec(),
+        }
     } else if buffer.starts_with(ANNOUNCE_URL) {
         //[TODO] Almacenar datos importantes [en .json?]
-        get_response_details(buffer, dic_torrents, *ip_port)
+        get_response_details(buffer, dic_torrents, json, *ip_port)
     } else {
         status_line = String::from(ERR_URL);
         fs::read(ERROR_HTML).map_err(|err| {
@@ -136,13 +155,16 @@ fn extract_last_contents_of_response(
 fn handle_single_connection(
     mut stream: TcpStream,
     dic_torrents: ArcMutexOfTorrents,
+    json: Arc<RwLock<Json>>,
     ip_port: SocketAddr,
 ) -> Result<(), CommunicationError> {
     let mut buffer = [0; 1024];
-    let _ = stream.read(&mut buffer);
+    stream
+        .read(&mut buffer)
+        .map_err(|err| CommunicationError::ReadingPeerSocket(err.to_string()))?;
 
     let (mut contents, status_line) =
-        extract_last_contents_of_response(&buffer, &dic_torrents, &ip_port)?;
+        extract_last_contents_of_response(&buffer, &dic_torrents, &json, &ip_port)?;
 
     let result = if contents == ERROR_500.as_bytes().to_vec() {
         Err(CommunicationError::UnlockingMutexOfTorrents)
@@ -173,6 +195,7 @@ fn handle_single_connection(
 pub fn general_communication(
     listener: TcpListener,
     mutex_of_torrents: ArcMutexOfTorrents,
+    mutex_of_json: &Arc<RwLock<Json>>,
     global_shutdown: Arc<RwLock<bool>>,
     number_threads: usize,
 ) -> Result<(), CommunicationError> {
@@ -183,22 +206,23 @@ pub fn general_communication(
             //Uso accept para obtener tambien la ip y el puerto de quien se conecto con el tracker
             Ok((stream, sock_addr)) => {
                 let dic_copy: ArcMutexOfTorrents = Arc::clone(&mutex_of_torrents);
+                let json_copy: Arc<RwLock<Json>> = Arc::clone(mutex_of_json);
                 info!(
                     "Connected to  [ {} : {} ]",
                     sock_addr.ip(),
                     sock_addr.port()
                 );
                 let global_shutdown_copy = Arc::clone(&global_shutdown);
-                pool.execute(
-                    move || match handle_single_connection(stream, dic_copy, sock_addr) {
+                pool.execute(move || {
+                    match handle_single_connection(stream, dic_copy, json_copy, sock_addr) {
                         Ok(_) => (),
                         Err(CommunicationError::UnlockingMutexOfTorrents) => {
                             let _ = set_global_shutdown(&global_shutdown_copy);
                             error!("{}", CommunicationError::UnlockingMutexOfTorrents);
                         }
                         Err(err) => error!("{}", err),
-                    },
-                )
+                    }
+                })
                 .map_err(|err| CommunicationError::PoolExecutionError(err.to_string()))?;
             }
             Err(error) => {

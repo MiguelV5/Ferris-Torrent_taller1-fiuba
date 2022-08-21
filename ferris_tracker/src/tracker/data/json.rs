@@ -12,7 +12,7 @@ pub const ONE: u32 = 1;
 pub const ZERO: u32 = 0;
 
 #[derive(Serialize, Deserialize)]
-struct Json {
+pub struct Json {
     torrents: u32,
     times: Vec<String>,
     connections: Vec<u32>,
@@ -23,6 +23,7 @@ struct Json {
 pub enum JsonError {
     OpeningFile,
     Format,
+    StoringFile(String),
 }
 
 impl fmt::Display for JsonError {
@@ -98,6 +99,12 @@ impl Json {
         });
 
         json_struct.to_string()
+    }
+
+    pub fn store(&self, path: &str) -> Result<(), JsonError> {
+        fs::write(path, self.get_json_string().as_bytes())
+            .map_err(|err| JsonError::StoringFile(err.to_string()))?;
+        Ok(())
     }
 }
 

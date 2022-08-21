@@ -32,14 +32,14 @@ use std::{
     error::Error,
     fmt,
     fs::{self, ReadDir},
-    net::TcpListener,
     path::Path,
     sync::{Arc, RwLock},
     thread::{self, JoinHandle},
 };
 
 use log::{debug, error, info};
-use shared::medatada_analyzer;
+use shared::{medatada_analyzer, port_binder::listener_binder::try_bind_listener};
+use tracker::data::constants::JSON;
 
 use crate::tracker::{
     communication::{
@@ -47,6 +47,7 @@ use crate::tracker::{
         handler::{set_global_shutdown, CommunicationError},
     },
     config_file_tracker,
+    data::json::Json,
     data::torrent_info::TorrentInfo,
 };
 
@@ -112,7 +113,7 @@ fn add_files_from_folder(list: &mut Vec<String>, folder: ReadDir) -> Result<(), 
     Ok(())
 }
 
-fn init_torrents(torrents_path: String) -> Result<ArcMutexOfTorrents, TrackerError> {
+fn init_torrents(torrents_path: String) -> Result<(ArcMutexOfTorrents, u32), TrackerError> {
     let list_torrents = create_list_files(torrents_path)?;
     let mut dic_torrents = HashMap::new();
     for torrent_file in list_torrents {
@@ -129,8 +130,17 @@ fn init_torrents(torrents_path: String) -> Result<ArcMutexOfTorrents, TrackerErr
         );
     }
 
-    //RwLock de un diccionario que contiene los TorrentInfo
-    Ok(Arc::new(RwLock::new(dic_torrents)))
+    // Para uso de announce desde browser:
+    // /announce?info_hash=ABCDEFGHIJKLMNOPQRST&peer_id=-FA0000-SegiJ88mlCo1&ip=127.0.0.1&port=6881&uploaded=0&downloaded=0&left=128&event=started
+    let independent_info_hash = "ABCDEFGHIJKLMNOPQRST".as_bytes().to_vec();
+    dic_torrents.insert(
+        independent_info_hash.clone(),
+        TorrentInfo::new(independent_info_hash),
+    );
+
+    let number_of_torrents = dic_torrents.len() as u32;
+
+    Ok((Arc::new(RwLock::new(dic_torrents)), number_of_torrents))
 }
 
 fn init_handler_for_quit_input(global_shutdown: Arc<RwLock<bool>>) -> JoinHandle<()> {
@@ -141,10 +151,23 @@ fn init_handler_for_quit_input(global_shutdown: Arc<RwLock<bool>>) -> JoinHandle
         let _ = std::io::stdin().read_line(&mut command);
         if command == exit_command {
             info!("Executing quit command");
-            let _ = set_global_shutdown(&global_shutdown); // Revisar que hacer con el error que surge de aca.
+            let _ = set_global_shutdown(&global_shutdown);
             break;
         }
     })
+}
+
+fn store_json_file(mutex_of_json: Arc<RwLock<Json>>) {
+    match mutex_of_json.read() {
+        Ok(json) => {
+            if json.store(JSON).is_err() {
+                error!("Error storing json");
+            } else {
+                info!("Json guardado exitosamente")
+            }
+        }
+        Err(_) => error!("Error unlocking json while storing"),
+    }
 }
 
 ///
@@ -164,17 +187,32 @@ pub fn run() -> ResultDyn<()> {
     let config_data = config_file_tracker::ConfigFileData::new("config.txt")?;
     info!("Archivo de configuración leido y parseado correctamente");
 
-    let mutex_of_torrents: ArcMutexOfTorrents = init_torrents(config_data.get_torrents_path())?;
+    let (mutex_of_torrents, number_of_torrents): (ArcMutexOfTorrents, u32) =
+        init_torrents(config_data.get_torrents_path())?;
+
+    let json = match Json::new_from_file(JSON) {
+        Ok(json_file) => {
+            info!("Json abierto y leido exitosamente");
+            json_file
+        }
+        Err(_) => {
+            info!("Json creado exitosamente");
+            Json::new(number_of_torrents)
+        }
+    };
+
+    let mutex_of_json: Arc<RwLock<Json>> = Arc::new(RwLock::new(json));
 
     let join_hander = init_handler_for_quit_input(Arc::clone(&global_shutdown));
 
-    // Nota (Miguel): Por las dudas al pasarlo al otro lado, despues usar el try bind del tp viejo.
-    let listener = TcpListener::bind("127.0.0.1:7878")?;
+    let (listener, _) = try_bind_listener(7878, 7900)?;
     let _ = listener.set_nonblocking(true);
     info!("Listening...");
+
     communication::handler::general_communication(
         listener,
         mutex_of_torrents,
+        &mutex_of_json,
         global_shutdown,
         config_data.get_number_of_threads(),
     )
@@ -183,6 +221,8 @@ pub fn run() -> ResultDyn<()> {
     join_hander
         .join()
         .map_err(|_err| TrackerError::JoiningQuitInput)?;
+
+    store_json_file(mutex_of_json);
 
     Ok(())
 }

@@ -44,7 +44,7 @@ fn generate_address(config_data: &ConfigFileData) -> String {
 fn set_up_directory(torrent_file_data: &TorrentFileData) -> ResultInteraction<()> {
     info!("Creo un directorio para guardar piezas");
     let torrent_path = torrent_file_data.get_torrent_representative_name();
-    let _unused_result = fs::remove_dir_all(format!("temp/{}", torrent_path));
+    let _ = fs::remove_dir_all(format!("temp/{}", torrent_path));
     fs::create_dir(format!("temp/{}", torrent_path))
         .map_err(|err| InteractionHandlerError::SetUpDirectory(format!("{}", err)))?;
     Ok(())
@@ -52,7 +52,7 @@ fn set_up_directory(torrent_file_data: &TorrentFileData) -> ResultInteraction<()
 
 fn remove_all(torrent_file_data: &TorrentFileData) -> ResultInteraction<()> {
     let torrent_path = torrent_file_data.get_torrent_representative_name();
-    let _unused_result = fs::remove_dir_all(format!("temp/{}", torrent_path)).map_err(|err| {
+    let _ = fs::remove_dir_all(format!("temp/{}", torrent_path)).map_err(|err| {
         InteractionHandlerErrorKind::Unrecoverable(InteractionHandlerError::RestartingDownload(
             format!("{}", err),
         ))
