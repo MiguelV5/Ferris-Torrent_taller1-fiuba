@@ -6,7 +6,7 @@ use log::{debug, info};
 
 use crate::torrent::client::pieces_assembling_handler;
 use crate::torrent::client::tracker_communication::http_handler;
-use crate::torrent::data::config_file_data::ConfigFileData;
+use crate::torrent::data::config_file_torrent::ConfigFileTorrent;
 use crate::torrent::data::{
     torrent_status::TorrentStatus, tracker_response_data::TrackerResponseData,
 };
@@ -36,7 +36,7 @@ pub const BLOCK_BYTES: u32 = 16384; //2^14 bytes
 
 pub const PUBLIC_IP: &str = "127.0.0.1:";
 
-fn generate_address(config_data: &ConfigFileData) -> String {
+fn generate_address(config_data: &ConfigFileTorrent) -> String {
     let address = PUBLIC_IP.to_string();
     let port = config_data.get_port().to_string();
     address + &port
@@ -87,7 +87,12 @@ fn set_shut_down(shut_down: Arc<RwLock<bool>>) -> Result<(), InteractionHandlerE
 /// medios) y los errores irrecuperables (los cuales detienen completamente la descarga del torrent e imprimen un fallo tanto por consola como en el archivo logs)
 ///
 fn handle_interaction_starting_as_server(
-    read_only_data: (TorrentFileData, ConfigFileData, PeerId, ExternalPeerAddres),
+    read_only_data: (
+        TorrentFileData,
+        ConfigFileTorrent,
+        PeerId,
+        ExternalPeerAddres,
+    ),
     torrent_status: Arc<RwLock<TorrentStatus>>,
     logger_sender: LoggerSender<String>,
     ui_sender: UiSender<MessageUI>,
@@ -221,7 +226,12 @@ fn generate_list_of_connected_peers(
 /// medios) y los errores irrecuperables (los cuales detienen completamente la descarga del torrent e imprimen un fallo tanto por consola como en el archivo logs)
 ///
 fn handle_interaction_starting_as_client(
-    read_only_data: (TorrentFileData, TrackerResponseData, ConfigFileData, PeerId),
+    read_only_data: (
+        TorrentFileData,
+        TrackerResponseData,
+        ConfigFileTorrent,
+        PeerId,
+    ),
     torrent_status: Arc<RwLock<TorrentStatus>>,
     mut list_connected_peers: Vec<usize>,
     logger_sender: LoggerSender<String>,
@@ -374,7 +384,7 @@ pub fn handle_general_interaction_with_peers(
     read_only_data: (
         &TorrentFileData,
         &TrackerResponseData,
-        &ConfigFileData,
+        &ConfigFileTorrent,
         PeerId,
     ),
     torrent_status: TorrentStatus,

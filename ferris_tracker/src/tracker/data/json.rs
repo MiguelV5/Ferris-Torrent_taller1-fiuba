@@ -12,7 +12,7 @@ pub const ONE: u32 = 1;
 pub const ZERO: u32 = 0;
 
 #[derive(Serialize, Deserialize)]
-pub struct Json {
+pub struct JsonHandler {
     torrents: u32,
     times: Vec<String>,
     connections: Vec<u32>,
@@ -34,9 +34,9 @@ impl fmt::Display for JsonError {
 
 impl Error for JsonError {}
 
-impl Json {
+impl JsonHandler {
     pub fn new(torrents: u32) -> Self {
-        Json {
+        JsonHandler {
             torrents,
             times: vec![],
             connections: vec![],
@@ -48,12 +48,12 @@ impl Json {
             Ok(string_file) => string_file,
             Err(_) => return Err(JsonError::OpeningFile),
         };
-        let json_file: Json = match serde_json::from_str(&data) {
+        let json_file: JsonHandler = match serde_json::from_str(&data) {
             Ok(json_struct) => json_struct,
             Err(_) => return Err(JsonError::Format),
         };
 
-        Ok(Json {
+        Ok(JsonHandler {
             torrents: json_file.torrents,
             times: json_file.times,
             connections: json_file.connections,
@@ -130,7 +130,7 @@ mod tests_json {
     #[test]
     fn test_new_json() {
         let torrents_expected = 3;
-        let json = Json::new(torrents_expected);
+        let json = JsonHandler::new(torrents_expected);
         assert_eq!(json.torrents, torrents_expected);
         assert!(json.times.is_empty());
         assert!(json.connections.is_empty());
@@ -147,7 +147,7 @@ mod tests_json {
         ];
         let connections_expected = vec![1, 2, 5];
         let completed_expected = vec![0, 0, 1];
-        let json_file = Json::new_from_file("test.json");
+        let json_file = JsonHandler::new_from_file("test.json");
         assert!(json_file.is_ok());
         if let Ok(json) = json_file {
             assert_eq!(json.torrents, torrents_expected);
@@ -159,7 +159,7 @@ mod tests_json {
 
     #[test]
     fn test_new_connections_json() {
-        let mut json = Json::new(2);
+        let mut json = JsonHandler::new(2);
         let connections_expected = vec![1, 2, 3, 4, 5];
         let completed_expected = vec![0, 0, 1, 2, 2];
 
@@ -175,7 +175,7 @@ mod tests_json {
 
     #[test]
     fn test_to_string_json() {
-        let mut json = Json::new(2);
+        let mut json = JsonHandler::new(2);
         let connections_expected = vec![1, 2, 3];
         let completed_expected = vec![0, 0, 1];
 
@@ -184,7 +184,7 @@ mod tests_json {
         json.add_new_connection(true);
 
         let json_string = json.get_json_string();
-        let json_struct: Json = match serde_json::from_str(&json_string) {
+        let json_struct: JsonHandler = match serde_json::from_str(&json_string) {
             Ok(json) => json,
             Err(_) => panic!("Can't transform to json"),
         };

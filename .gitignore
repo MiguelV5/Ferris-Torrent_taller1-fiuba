@@ -16,5 +16,9 @@ Cargo.lock
 ferris_torrent/results/logs/*.txt
 ferris_torrent/results/download/*
 
+ferris_tracker/database.json
+
 temp/*
+
+
 

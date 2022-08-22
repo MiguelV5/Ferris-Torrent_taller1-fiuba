@@ -14,7 +14,7 @@ use crate::{
     tracker::{
         data::{
             constants::*,
-            json::Json,
+            json::JsonHandler,
             peer_info::{get_error_response_for_announce, PeerInfo, PeerInfoError},
             torrent_info::StatusPeer,
         },
@@ -62,7 +62,7 @@ pub fn set_global_shutdown(global_shutdown: &Arc<RwLock<bool>>) -> Result<(), Co
 fn get_response_details(
     buffer: &[u8],
     dic_torrents: &ArcMutexOfTorrents,
-    json: &Arc<RwLock<Json>>,
+    json: &Arc<RwLock<JsonHandler>>,
     ip_port: SocketAddr,
 ) -> Vec<u8> {
     let info_of_announced_peer = PeerInfo::new((*buffer).to_vec(), ip_port);
@@ -129,7 +129,7 @@ fn get_response_details(
 fn extract_last_contents_of_response(
     buffer: &[u8],
     dic_torrents: &ArcMutexOfTorrents,
-    json: &Arc<RwLock<Json>>,
+    json: &Arc<RwLock<JsonHandler>>,
     ip_port: &SocketAddr,
 ) -> Result<(Vec<u8>, String), CommunicationError> {
     let mut status_line = String::from(OK_URL);
@@ -173,7 +173,7 @@ fn extract_last_contents_of_response(
 fn handle_single_connection(
     mut stream: TcpStream,
     dic_torrents: ArcMutexOfTorrents,
-    json: Arc<RwLock<Json>>,
+    json: Arc<RwLock<JsonHandler>>,
     ip_port: SocketAddr,
 ) -> Result<(), CommunicationError> {
     let mut buffer = [0; 1024];
@@ -213,7 +213,7 @@ fn handle_single_connection(
 pub fn general_communication(
     listener: TcpListener,
     mutex_of_torrents: ArcMutexOfTorrents,
-    mutex_of_json: &Arc<RwLock<Json>>,
+    mutex_of_json: &Arc<RwLock<JsonHandler>>,
     global_shutdown: Arc<RwLock<bool>>,
     number_threads: usize,
 ) -> Result<(), CommunicationError> {
@@ -224,7 +224,7 @@ pub fn general_communication(
             //Uso accept para obtener tambien la ip y el puerto de quien se conecto con el tracker
             Ok((stream, sock_addr)) => {
                 let dic_copy: ArcMutexOfTorrents = Arc::clone(&mutex_of_torrents);
-                let json_copy: Arc<RwLock<Json>> = Arc::clone(mutex_of_json);
+                let json_copy: Arc<RwLock<JsonHandler>> = Arc::clone(mutex_of_json);
                 info!(
                     "Connected to  [ {} : {} ]",
                     sock_addr.ip(),

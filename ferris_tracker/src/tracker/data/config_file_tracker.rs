@@ -6,28 +6,27 @@ use std::{
     io::{BufRead, BufReader},
 };
 
-const PORT: &str = "port";
-const DOWNLOAD: &str = "download";
-const LOGS: &str = "logs";
+const TORRENTS_PATH: &str = "torrents_path";
+const NUMBER_THREADS: &str = "number_threads";
 const WHITESPACE: &str = " ";
+const MAX_SUPPORTED_THREADS: usize = 5;
 
 type ResultConfig<T> = Result<T, ConfigFileDataError>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ConfigFileData {
-    pub port: u32,
-    pub log_path: String,
-    pub download_path: String,
+    pub number_of_threads: usize,
+    pub torrents_path: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ConfigFileDataError {
     FileNotFound,
     BadSize,
-    PortNotANumber,
+    ThreadsNotANumber,
+    MissingThreads,
     BadLine,
     InvalidFormat,
-    MissingPort,
     MissingPath(String),
 }
 
@@ -48,47 +47,39 @@ impl ConfigFileData {
     /// Deben de ingresarse en el formato "clave valor"
     /// Con un espacio de separador.
     /// Requiere las claves:
-    /// port: número de puerto en el que se escuharan conexiones
-    /// download: path del directorio descarga del torrent
-    /// logs: path del del directorio del archivo de logs
+    /// number_of_threads: número de threads que se abrirán en la threadpool
+    /// torrents_path: path del directorio de torrents disponibles para el tracker
     /// Por ejemplo:
     /// ```txt
-    /// port <nro_puerto>
-    /// download <path_descargas>
-    /// logs <path_logs>
+    /// number_of_threads <nro_puerto>
+    /// torrents_path <path_descargas>
     /// ```
     ///
     pub fn new(config_file_path: &str) -> Result<ConfigFileData, ConfigFileDataError> {
         let lines = read_config_file(config_file_path)?;
-        if lines.len() != 3 {
+        if lines.len() != 2 {
             return Err(ConfigFileDataError::BadSize);
         }
         let config_map = get_data_from_config_file(lines)?;
         Ok(ConfigFileData {
-            port: read_port(&config_map)?,
-            log_path: read_path(&config_map, LOGS)?,
-            download_path: read_path(&config_map, DOWNLOAD)?,
+            number_of_threads: read_number_of_threads(&config_map)?,
+            torrents_path: read_path(&config_map, TORRENTS_PATH)?,
         })
     }
 
-    ///Port getter
-    pub fn get_port(&self) -> u32 {
-        self.port
+    ///Number of thread getter
+    pub fn get_number_of_threads(&self) -> usize {
+        self.number_of_threads
     }
 
-    ///Log path getter
-    pub fn get_log_path(&self) -> String {
-        self.log_path.clone()
-    }
-
-    ///Download path getter
-    pub fn get_download_path(&self) -> String {
-        self.download_path.clone()
+    ///Torrents path getter
+    pub fn get_torrents_path(&self) -> String {
+        self.torrents_path.clone()
     }
 }
 
 /// Se encarga de extraer directamente la info del archivo de configuración
-/// y se coloca en un hashmap, qque será utilizado luego para mapear
+/// y se coloca en un hashmap, que será utilizado luego para mapear
 /// los datos
 ///
 fn get_data_from_config_file(
@@ -111,24 +102,29 @@ fn get_data_from_config_file(
     Ok(config_map)
 }
 
-fn read_port(config_map: &HashMap<String, String>) -> Result<u32, ConfigFileDataError> {
-    if let Some(value_read) = config_map.get(PORT) {
-        match value_read.parse::<u32>() {
-            Ok(port_read) => return Ok(port_read),
-            Err(_) => return Err(ConfigFileDataError::PortNotANumber),
+fn read_number_of_threads(
+    config_map: &HashMap<String, String>,
+) -> Result<usize, ConfigFileDataError> {
+    if let Some(value_read) = config_map.get(NUMBER_THREADS) {
+        match value_read.parse::<usize>() {
+            Ok(num_of_threads) if num_of_threads <= MAX_SUPPORTED_THREADS => {
+                return Ok(num_of_threads)
+            }
+            Ok(_) => return Ok(MAX_SUPPORTED_THREADS),
+            Err(_) => return Err(ConfigFileDataError::ThreadsNotANumber),
         };
     }
-    Err(ConfigFileDataError::MissingPort)
+    Err(ConfigFileDataError::MissingThreads)
 }
 
 fn read_path(
     config_map: &HashMap<String, String>,
-    results_path: &str,
+    torrents_path: &str,
 ) -> Result<String, ConfigFileDataError> {
-    if let Some(value_read) = config_map.get(results_path) {
+    if let Some(value_read) = config_map.get(torrents_path) {
         return Ok(value_read.clone());
     }
-    Err(ConfigFileDataError::MissingPath(results_path.to_string()))
+    Err(ConfigFileDataError::MissingPath(torrents_path.to_string()))
 }
 
 /// Se encarga de leer la información de configuración
@@ -160,7 +156,7 @@ mod tests_config_file {
             Ok(config_data) => config_data,
             Err(error) => return Err(error),
         };
-        assert_eq!(config_data.len(), 3);
+        assert_eq!(config_data.len(), 2);
         Ok(())
     }
 
@@ -171,9 +167,8 @@ mod tests_config_file {
             Ok(config) => config,
             Err(error) => return Err(error),
         };
-        assert_eq!(config.port, 6881);
-        assert_eq!(config.download_path, "ferris_torrent/results/download");
-        assert_eq!(config.log_path, "ferris_torrent/results/logs");
+        assert_eq!(config.number_of_threads, 4);
+        assert_eq!(config.torrents_path, "torrents_files");
         Ok(())
     }
 }

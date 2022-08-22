@@ -8,7 +8,7 @@ use crate::torrent::{
         peers_communication::{self, local_peer_communicator::generate_peer_id},
         tracker_communication::http_handler,
     },
-    data::{config_file_data::ConfigFileData, torrent_status::TorrentStatus},
+    data::{config_file_torrent::ConfigFileTorrent, torrent_status::TorrentStatus},
     logger::{self, Logger},
     user_interface::{constants::MessageUI, ui_sender_handler},
 };
@@ -71,7 +71,7 @@ type JoinHandleTorrent = JoinHandle<ResultTorrent>;
 ///
 fn handle_torrent(
     torrent_file: TorrentFileData,
-    config_data: &ConfigFileData,
+    config_data: &ConfigFileTorrent,
     logger_sender: &LoggerSender<String>,
     ui_sender: &UiSender<MessageUI>,
     global_shut_down: &Arc<RwLock<bool>>,
@@ -152,7 +152,7 @@ fn is_shut_down_set(global_shut_down: &Arc<RwLock<bool>>) -> Result<bool, Torren
 }
 
 fn set_up_logger(
-    config_data: &ConfigFileData,
+    config_data: &ConfigFileTorrent,
     torrent_file: &TorrentFileData,
 ) -> Result<(LoggerSender<String>, JoinHandle<()>), TorrentHandlerError> {
     let logger = Logger::new(
@@ -171,7 +171,7 @@ fn set_up_logger(
 ///
 fn handle_list_of_torrents(
     files_list: Vec<String>,
-    config_data: ConfigFileData,
+    config_data: ConfigFileTorrent,
     ui_sender: UiSender<MessageUI>,
     global_shut_down: Arc<RwLock<bool>>,
 ) -> JoinHandleTorrent {
@@ -265,7 +265,7 @@ pub fn handle_all_torrents(
     ui_sender: UiSender<MessageUI>,
     global_shut_down: &Arc<RwLock<bool>>,
 ) -> Result<(JoinHandleTorrent, JoinHandleTorrent), Box<dyn Error>> {
-    let mut config_data = ConfigFileData::new("ferris_torrent/config.txt")?;
+    let mut config_data = ConfigFileTorrent::new("ferris_torrent/config.txt")?;
     info!("Archivo de configuración leido y parseado correctamente");
 
     let (files_list_1, files_list_2) = generate_file_lists()?;

@@ -46,8 +46,8 @@ use crate::tracker::{
         self,
         handler::{set_global_shutdown, CommunicationError},
     },
-    config_file_tracker,
-    data::json::Json,
+    data::config_file_tracker,
+    data::json::JsonHandler,
     data::torrent_info::TorrentInfo,
 };
 
@@ -157,7 +157,7 @@ fn init_handler_for_quit_input(global_shutdown: Arc<RwLock<bool>>) -> JoinHandle
     })
 }
 
-fn store_json_file(mutex_of_json: Arc<RwLock<Json>>) {
+fn store_json_file(mutex_of_json: Arc<RwLock<JsonHandler>>) {
     match mutex_of_json.read() {
         Ok(json) => {
             if json.store(JSON).is_err() {
@@ -190,18 +190,18 @@ pub fn run() -> ResultDyn<()> {
     let (mutex_of_torrents, number_of_torrents): (ArcMutexOfTorrents, u32) =
         init_torrents(config_data.get_torrents_path())?;
 
-    let json = match Json::new_from_file(JSON) {
+    let json = match JsonHandler::new_from_file(JSON) {
         Ok(json_file) => {
             info!("Json abierto y leido exitosamente");
             json_file
         }
         Err(_) => {
             info!("Json creado exitosamente");
-            Json::new(number_of_torrents)
+            JsonHandler::new(number_of_torrents)
         }
     };
 
-    let mutex_of_json: Arc<RwLock<Json>> = Arc::new(RwLock::new(json));
+    let mutex_of_json: Arc<RwLock<JsonHandler>> = Arc::new(RwLock::new(json));
 
     let join_hander = init_handler_for_quit_input(Arc::clone(&global_shutdown));
 

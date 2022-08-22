@@ -10,7 +10,7 @@ use native_tls::TlsConnector;
 
 use super::constants::*;
 use crate::torrent::data::{
-    config_file_data::ConfigFileData,
+    config_file_torrent::ConfigFileTorrent,
     torrent_status::TorrentStatus,
     tracker_response_data::{ResponseError, TrackerResponseData},
 };
@@ -151,7 +151,7 @@ impl MsgDescriptor {
         torrent_status: &TorrentStatus,
         torrent_file_data: &TorrentFileData,
         peer_id: String,
-        config_data: &ConfigFileData,
+        config_data: &ConfigFileTorrent,
     ) -> ResultMsg<Self> {
         let info_hash = init_info_hash(torrent_file_data.get_info_hash());
         let ip = String::from(IP_CLIENT);
@@ -292,7 +292,7 @@ impl HttpHandler {
         torrent_status: &TorrentStatus,
         torrent_file_data: &TorrentFileData,
         peer_id: String,
-        config_data: &ConfigFileData,
+        config_data: &ConfigFileTorrent,
     ) -> ResultMsg<Self> {
         let tracker_main = torrent_file_data.get_tracker_main();
         Ok(HttpHandler {
@@ -464,7 +464,7 @@ impl HttpHandler {
 pub fn communicate_with_tracker(
     torrent_status: &TorrentStatus,
     torrent_file_data: &TorrentFileData,
-    config_data: &ConfigFileData,
+    config_data: &ConfigFileTorrent,
     peer_id: Vec<u8>,
 ) -> Result<TrackerResponseData, ErrorMsgHttp> {
     let str_peer_id = String::from_utf8_lossy(&peer_id).to_string();
@@ -503,7 +503,7 @@ mod tests_http_handler {
     use shared::medatada_analyzer::read_torrent_file_to_dic;
 
     use super::*;
-    use crate::torrent::data::config_file_data::ConfigFileData;
+    use crate::torrent::data::config_file_torrent::ConfigFileTorrent;
 
     #[test]
     fn test_creation_file1_ok() -> Result<(), Box<dyn Error>> {
@@ -519,7 +519,7 @@ mod tests_http_handler {
             Err(error) => return Err(Box::new(error)),
         };
 
-        let config_data = ConfigFileData::new("config.txt")?;
+        let config_data = ConfigFileTorrent::new("config.txt")?;
 
         let torrent_status =
             TorrentStatus::new(torrent.get_total_length(), torrent.total_amount_of_pieces);
@@ -561,7 +561,7 @@ mod tests_http_handler {
             Err(error) => return Err(Box::new(error)),
         };
 
-        let config_data = ConfigFileData::new("config.txt")?;
+        let config_data = ConfigFileTorrent::new("config.txt")?;
 
         let torrent_status =
             TorrentStatus::new(torrent.get_total_length(), torrent.total_amount_of_pieces);
@@ -609,7 +609,7 @@ mod tests_http_handler {
             Err(error) => return Err(Box::new(error)),
         };
 
-        let config_data = ConfigFileData::new("config.txt")?;
+        let config_data = ConfigFileTorrent::new("config.txt")?;
 
         let torrent_status =
             TorrentStatus::new(torrent.get_total_length(), torrent.total_amount_of_pieces);
@@ -657,7 +657,7 @@ mod tests_http_handler {
             Err(error) => return Err(Box::new(error)),
         };
 
-        let config_data = ConfigFileData::new("config.txt")?;
+        let config_data = ConfigFileTorrent::new("config.txt")?;
 
         let torrent_status =
             TorrentStatus::new(torrent.get_total_length(), torrent.total_amount_of_pieces);

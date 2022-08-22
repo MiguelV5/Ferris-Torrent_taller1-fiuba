@@ -11,17 +11,17 @@ const DOWNLOAD: &str = "download";
 const LOGS: &str = "logs";
 const WHITESPACE: &str = " ";
 
-type ResultConfig<T> = Result<T, ConfigFileDataError>;
+type ResultConfig<T> = Result<T, ConfigFiletTorrentError>;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ConfigFileData {
+pub struct ConfigFileTorrent {
     pub port: u32,
     pub log_path: String,
     pub download_path: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ConfigFileDataError {
+pub enum ConfigFiletTorrentError {
     FileNotFound,
     BadSize,
     PortNotANumber,
@@ -31,7 +31,7 @@ pub enum ConfigFileDataError {
     MissingPath(String),
 }
 
-impl fmt::Display for ConfigFileDataError {
+impl fmt::Display for ConfigFiletTorrentError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -41,9 +41,9 @@ impl fmt::Display for ConfigFileDataError {
     }
 }
 
-impl Error for ConfigFileDataError {}
+impl Error for ConfigFiletTorrentError {}
 
-impl ConfigFileData {
+impl ConfigFileTorrent {
     /// Datos del archivo de configuración:
     /// Deben de ingresarse en el formato "clave valor"
     /// Con un espacio de separador.
@@ -58,13 +58,13 @@ impl ConfigFileData {
     /// logs <path_logs>
     /// ```
     ///
-    pub fn new(config_file_path: &str) -> Result<ConfigFileData, ConfigFileDataError> {
+    pub fn new(config_file_path: &str) -> Result<ConfigFileTorrent, ConfigFiletTorrentError> {
         let lines = read_config_file(config_file_path)?;
         if lines.len() != 3 {
-            return Err(ConfigFileDataError::BadSize);
+            return Err(ConfigFiletTorrentError::BadSize);
         }
         let config_map = get_data_from_config_file(lines)?;
-        Ok(ConfigFileData {
+        Ok(ConfigFileTorrent {
             port: read_port(&config_map)?,
             log_path: read_path(&config_map, LOGS)?,
             download_path: read_path(&config_map, DOWNLOAD)?,
@@ -93,7 +93,7 @@ impl ConfigFileData {
 ///
 fn get_data_from_config_file(
     lines: Vec<String>,
-) -> Result<HashMap<String, String>, ConfigFileDataError> {
+) -> Result<HashMap<String, String>, ConfigFiletTorrentError> {
     let mut config_map: HashMap<String, String> = HashMap::new();
     for line in lines {
         let pair_data_value: Vec<String> = line
@@ -105,30 +105,32 @@ fn get_data_from_config_file(
             [key, value] => {
                 config_map.insert(key.to_string(), value.to_string());
             }
-            _ => return Err(ConfigFileDataError::InvalidFormat),
+            _ => return Err(ConfigFiletTorrentError::InvalidFormat),
         }
     }
     Ok(config_map)
 }
 
-fn read_port(config_map: &HashMap<String, String>) -> Result<u32, ConfigFileDataError> {
+fn read_port(config_map: &HashMap<String, String>) -> Result<u32, ConfigFiletTorrentError> {
     if let Some(value_read) = config_map.get(PORT) {
         match value_read.parse::<u32>() {
             Ok(port_read) => return Ok(port_read),
-            Err(_) => return Err(ConfigFileDataError::PortNotANumber),
+            Err(_) => return Err(ConfigFiletTorrentError::PortNotANumber),
         };
     }
-    Err(ConfigFileDataError::MissingPort)
+    Err(ConfigFiletTorrentError::MissingPort)
 }
 
 fn read_path(
     config_map: &HashMap<String, String>,
     results_path: &str,
-) -> Result<String, ConfigFileDataError> {
+) -> Result<String, ConfigFiletTorrentError> {
     if let Some(value_read) = config_map.get(results_path) {
         return Ok(value_read.clone());
     }
-    Err(ConfigFileDataError::MissingPath(results_path.to_string()))
+    Err(ConfigFiletTorrentError::MissingPath(
+        results_path.to_string(),
+    ))
 }
 
 /// Se encarga de leer la información de configuración
@@ -137,7 +139,7 @@ fn read_path(
 fn read_config_file(filename: &str) -> ResultConfig<Vec<String>> {
     let file = match File::open(filename) {
         Ok(file_open) => file_open,
-        Err(_) => return Err(ConfigFileDataError::FileNotFound),
+        Err(_) => return Err(ConfigFiletTorrentError::FileNotFound),
     };
 
     let buf = BufReader::new(file);
@@ -154,7 +156,7 @@ mod tests_config_file {
     use super::*;
 
     #[test]
-    fn read_config_file_ok() -> Result<(), ConfigFileDataError> {
+    fn read_config_file_ok() -> Result<(), ConfigFiletTorrentError> {
         let file_dir = "config.txt";
         let config_data = match read_config_file(file_dir) {
             Ok(config_data) => config_data,
@@ -165,9 +167,9 @@ mod tests_config_file {
     }
 
     #[test]
-    fn read_fill_config_data_ok() -> Result<(), ConfigFileDataError> {
+    fn read_fill_config_data_ok() -> Result<(), ConfigFiletTorrentError> {
         let file_dir = "config.txt";
-        let config = match ConfigFileData::new(file_dir) {
+        let config = match ConfigFileTorrent::new(file_dir) {
             Ok(config) => config,
             Err(error) => return Err(error),
         };
