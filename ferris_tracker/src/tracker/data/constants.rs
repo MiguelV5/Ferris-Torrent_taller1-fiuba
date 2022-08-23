@@ -44,7 +44,6 @@ pub const PEER_ID_BYTES: &[u8] = b"peer_id";
 pub const IP_BYTES: &[u8] = b"ip";
 pub const PORT_BYTES: &[u8] = b"port";
 
-//[TODO] Mejorar los mensajes de error
 pub const ERROR_INFO_HASH_NOT_FOUND: &str = "you sent me garbage - no info hash";
 pub const ERROR_INFO_HASH_INVALID: &str =
     "d14:failure reason63:Requested download is not authorized for use with this tracker.e";

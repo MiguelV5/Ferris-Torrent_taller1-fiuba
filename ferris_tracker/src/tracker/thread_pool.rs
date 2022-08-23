@@ -52,10 +52,10 @@ impl Worker {
                             info!("Worker {} was told to terminate.", id);
                             break;
                         }
-                        Err(_) => break, //Ver como informar este error
+                        Err(_) => break,
                     }
                 }
-                Err(_) => break, //Ver como informar este error
+                Err(_) => break,
             }
         }));
         Worker { id, thread }

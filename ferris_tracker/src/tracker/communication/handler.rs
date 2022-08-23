@@ -159,7 +159,6 @@ fn extract_last_contents_of_response(
             Err(_err) => ERROR_500.as_bytes().to_vec(),
         }
     } else if buffer.starts_with(ANNOUNCE_URL) {
-        //[TODO] Almacenar datos importantes [en .json?]
         get_response_details(buffer, dic_torrents, json, *ip_port)
     } else {
         status_line = String::from(ERR_URL);

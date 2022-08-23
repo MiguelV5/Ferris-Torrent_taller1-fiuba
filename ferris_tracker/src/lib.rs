@@ -173,9 +173,8 @@ fn store_json_file(mutex_of_json: Arc<RwLock<JsonHandler>>) {
 ///
 /// FUNCION PRINCIPAL PARA LA EJECUCION DEL PROGRAMA
 ///
-///
-///
-/// ... (Despues se puede ver si permitimos tener una especie de tracker dinamico con torrents adicionales)
+///A partir de una ruta especificada en el archivo de configuracion (la ruta puede corresponder a un archivo .torrent en particular o a un directorio con archivos .torrent) se despliega el tracker con información de todos los torrents encontrados. Además, es necesario que en el archivo de configuracion se suministre la cantidad maxima de threads deseados a utilizar con el ThreadPool.
+/// El mismo soporta endpoints /stats, /announce, /docs.
 /// Devuelve un Error si hubo algún problema durante todo el proceso.
 ///
 pub fn run() -> ResultDyn<()> {
