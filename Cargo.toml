@@ -1,0 +1,5 @@
+
+[workspace]
+members = ["ferris_torrent","ferris_tracker", "shared"]
+
+
