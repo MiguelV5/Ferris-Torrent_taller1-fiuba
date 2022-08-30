@@ -21,10 +21,10 @@
 
 ### Integrantes
 
-- Axel Aparicio
-- Luciano Gamberale
-- Erick Martinez
-- Miguel Vasquez
+- Axel Aparicio - [axlrott](https://github.com/axlrott)
+- Luciano Gamberale - [lucianogamberale](https://github.com/lucianogamberale)
+- Erick Martinez - [erick12m](https://github.com/erick12m)
+- Miguel Vasquez - [MiguelV5](https://github.com/MiguelV5)
 
 ---
 
@@ -43,7 +43,18 @@ Se tiene como objetivo de funcionalidad agregada implementar un Tracker HTTP de 
 
 En general, los distintos `<tipo_de_log>` son: `info, debug, trace`.
 
+#### NOTA IMPORTANTE
+
+Para poder ejecutar el cliente con su interfaz gráfica es necesario tener instalado gtk4. 
+Preferiblemente desde una distribución de linux que soporte la instalación para evitar inconvenientes de incompatibilidad o instalación compleja.
+Ej. Ubuntu 22.04 LTS:  
+
+```bash
+sudo apt-get install libgtk-4-bin libgtk-4-common libgtk-4-dev libgtk-4-doc 
+```
+
 ### Cliente *Ferris Torrent*
+
 
 ```bash
 RUST_LOG=<tipo_de_log> cargo run -p ferris_torrent -- <ARGS: archivos_torrent / path_a_directorio_con_torrents>
@@ -113,5 +124,4 @@ cargo test -p ferris_tracker
 de acuerdo a períodos fijos de tiempo (última hora, últimas 5 horas, último día, últimos 3 días) y con determinadas frecuencias (horas, minutos).
 - Responde el endpoint /announce correctamente a uno o más peers determinados, siguiendo la documentación encontrada en el endpoint /docs.
 - Para acceso a los distintos endpoints simplemente ejecutar el tracker y abrir en el browser la página en localhost:7878. Desde allí se provee la interfáz front para ingresar a los distintos endpoints mencionados.
-
-(No se agrega más funcionalidad al Cliente Ferris-Torrent)
+- (No se agrega más funcionalidad al Cliente Ferris-Torrent)
