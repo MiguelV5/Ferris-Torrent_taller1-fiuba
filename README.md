@@ -95,8 +95,6 @@ cargo test -p ferris_tracker
 
 ## Funcionalidad soportada
 
-(**Nota:** Todos los releases referidos se encuentran en el repositorio original)
-
 ### Primera versión (Release: *checkpoint*)
 
 - Recibir por linea de comandos la ruta de un archivo .torrent
